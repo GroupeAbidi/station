@@ -348,6 +348,21 @@ Deno.serve(async request => {
     if (request.method === 'GET' && path === '/audit') {
       permit(user, 'audit.view'); const { data, error } = await db.from('AuditEvent').select('*,user:User(name)').order('createdAt', { ascending: false }).limit(200); if (error) databaseError(error); return json(data);
     }
+    if (request.method === 'GET' && path === '/dashboard') {
+      permit(user, 'dashboard.view');
+      const since = new Date(Date.now() - 14 * 86400000).toISOString();
+      const [productsResult, purchasesResult, salesResult, movementsResult, recentSalesResult] = await Promise.all([
+        db.from('Product').select('*').eq('active', true).order('name'),
+        db.from('PurchaseRequest').select('status'),
+        db.from('Sale').select('createdAt,totalCents').gte('createdAt', since),
+        db.from('StockMovement').select('*,product:Product(name,baseUnit)').order('createdAt', { ascending: false }).limit(7),
+        db.from('Sale').select('id,ref,client,totalCents,createdAt').order('createdAt', { ascending: false }).limit(5),
+      ]);
+      for (const result of [productsResult, purchasesResult, salesResult, movementsResult, recentSalesResult]) if (result.error) databaseError(result.error);
+      const products = productsResult.data!; const purchases = purchasesResult.data!; const sales = salesResult.data!;
+      const daySeries = Array.from({ length: 14 }, (_, index) => { const day = new Date(Date.now() - (13 - index) * 86400000).toISOString().slice(0, 10); return { day, total: sales.filter((sale: any) => sale.createdAt.slice(0, 10) === day).reduce((sum: number, sale: any) => sum + sale.totalCents, 0) / 100 }; });
+      return json({ productCount: products.length, lowStock: products.filter((product: any) => product.stockMilli <= product.minStockMilli), pendingCount: purchases.filter((purchase: any) => purchase.status === 'PENDING').length, activePurchaseCount: purchases.filter((purchase: any) => ['APPROVED', 'PARTIAL'].includes(purchase.status)).length, sales14DaysCents: sales.reduce((sum: number, sale: any) => sum + sale.totalCents, 0), saleCount14Days: sales.length, daySeries, recentMovements: movementsResult.data, recentSales: recentSalesResult.data });
+    }
 
     return json({ error: `Route inconnue : ${request.method} ${path}` }, 404);
   } catch (error) {
