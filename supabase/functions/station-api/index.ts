@@ -363,6 +363,12 @@ Deno.serve(async request => {
       const daySeries = Array.from({ length: 14 }, (_, index) => { const day = new Date(Date.now() - (13 - index) * 86400000).toISOString().slice(0, 10); return { day, total: sales.filter((sale: any) => sale.createdAt.slice(0, 10) === day).reduce((sum: number, sale: any) => sum + sale.totalCents, 0) / 100 }; });
       return json({ productCount: products.length, lowStock: products.filter((product: any) => product.stockMilli <= product.minStockMilli), pendingCount: purchases.filter((purchase: any) => purchase.status === 'PENDING').length, activePurchaseCount: purchases.filter((purchase: any) => ['APPROVED', 'PARTIAL'].includes(purchase.status)).length, sales14DaysCents: sales.reduce((sum: number, sale: any) => sum + sale.totalCents, 0), saleCount14Days: sales.length, daySeries, recentMovements: movementsResult.data, recentSales: recentSalesResult.data });
     }
+    if (request.method === 'POST' && path === '/stock/adjust') {
+      permit(user, 'stock.adjust'); const body = await request.json(); const amount = Number(body.delta); if (!Number.isFinite(amount) || amount === 0) fail(400, 'Variation obligatoire.');
+      const delta = Math.sign(amount) * toMilli(Math.abs(amount)); const reason = requireString(body.reason, 'Motif', 8, 300);
+      const { data, error } = await db.rpc('station_adjust_stock', { p_user_id: user.id, p_product_id: requireString(body.productId, 'Article', 1, 100), p_delta_milli: delta, p_reason: reason });
+      if (error) fail(400, error.message); return json(data, 201);
+    }
 
     return json({ error: `Route inconnue : ${request.method} ${path}` }, 404);
   } catch (error) {
