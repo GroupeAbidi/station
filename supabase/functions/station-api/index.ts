@@ -70,7 +70,7 @@ Deno.serve(async request => {
       if (error) databaseError(error);
       return json(data);
     }
-    if (request.method === 'POST' && path === '/auth/login') {
+    if (request.method === 'POST' && (path === '/auth/login' || path === '/')) {
       const body = await request.json();
       const username = requireString(body.username, 'Nom utilisateur', 3, 40).toLowerCase();
       const password = requireString(body.password, 'Mot de passe', 1, 120);
