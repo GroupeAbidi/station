@@ -1,6 +1,7 @@
 const TOKEN_KEY = 'magasinpro_token';
 const cloudApi = 'https://efpjiwmtyywmsymnlrga.supabase.co/functions/v1/station-api';
-const API_BASE = (import.meta.env.VITE_API_URL || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? '/api' : cloudApi)).replace(/\/$/, '');
+const configuredApi = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_API_URL : undefined;
+const API_BASE = (configuredApi || (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? '/api' : cloudApi)).replace(/\/$/, '');
 export const getToken = () => sessionStorage.getItem(TOKEN_KEY);
 export const setToken = token => token ? sessionStorage.setItem(TOKEN_KEY, token) : sessionStorage.removeItem(TOKEN_KEY);
 export async function api(path, options = {}) {
