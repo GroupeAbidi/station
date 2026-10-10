@@ -344,6 +344,14 @@ Deno.serve(async request => {
       const { data, error } = await query; if (error) databaseError(error);
       return json(user.role === 'VENTES' ? data.map((sale: any) => ({ ...sale, lines: sale.lines.map((line: any) => { const { purchasePriceCents, ...product } = line.product; return { ...line, product }; }) })) : data);
     }
+    const returnMatch = path.match(/^\/sales\/([^/]+)\/return$/);
+    if (request.method === 'POST' && returnMatch) {
+      permit(user, 'sales.return'); const body = await request.json(); const reason = requireString(body.reason, 'Motif', 5, 300);
+      if (!Array.isArray(body.lines) || !body.lines.length) fail(400, 'SÃ©lectionnez au moins une ligne.');
+      const lines = body.lines.map((line: any) => ({ saleLineId: requireString(line.saleLineId, 'Ligne', 1, 100), quantityMilli: toMilli(line.quantity) }));
+      const { data, error } = await db.rpc('station_return_sale', { p_user_id: user.id, p_sale_id: returnMatch[1], p_reason: reason, p_lines: lines });
+      if (error) fail(400, error.message); return json(data, 201);
+    }
 
     if (request.method === 'GET' && path === '/reports/profit') {
       permit(user, 'reports.profit');
