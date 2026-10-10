@@ -40,6 +40,8 @@ const toCents = (value: unknown) => {
   if (!Number.isFinite(number) || number < 0 || Math.abs(number * 100 - Math.round(number * 100)) > 0.000001) fail(400, 'Prix invalide.');
   return Math.round(number * 100);
 };
+const normalizeName = (value: string) => value.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+const productCode = () => `ART-${Math.floor(Math.random() * 9e8 + 1e8)}`;
 const userView = (user: any) => ({ id: user.id, name: user.name, username: user.username || user.email, role: user.role, active: user.active });
 const reference = (prefix: string) => `${prefix}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${crypto.randomUUID().slice(0, 5).toUpperCase()}`;
 
@@ -186,6 +188,48 @@ Deno.serve(async request => {
       if (!data) fail(404, `Article introuvable : ${code}`);
       if (user.role === 'VENTES') { const { purchasePriceCents, ...product } = data; return json(product); }
       return json(data);
+    }
+    const productInput = async (existingCode?: string) => {
+      const body = await request.json();
+      const name = requireString(body.name, 'Nom produit', 2, 150);
+      const baseUnit = ['PCE', 'L', 'KG', 'M'].includes(body.baseUnit) ? body.baseUnit : fail(400, 'UnitÃ© de stock invalide.');
+      const factor = toMilli(body.purchaseFactor, 'Coefficient d’achat');
+      const minStock = body.minStock === undefined || body.minStock === '' ? 0 : toMilli(body.minStock, 'Seuil minimum');
+      if (baseUnit === 'PCE' && (factor % 1000 || minStock % 1000)) fail(400, 'Les piÃ¨ces doivent avoir une quantitÃ© entiÃ¨re.');
+      const internalCode = clean(body.internalCode || existingCode || productCode()).toUpperCase().replace(/\s+/g, '-');
+      const barcode = clean(body.barcode) || null;
+      if (!/^[A-Z0-9._-]{3,55}$/.test(internalCode)) fail(400, 'RÃ©fÃ©rence interne invalide.');
+      if (barcode && !/^[A-Za-z0-9._-]{3,64}$/.test(barcode)) fail(400, 'Code-barres invalide.');
+      return { name, normalizedName: normalizeName(name), internalCode, barcode, category: clean(body.category || 'Divers').slice(0, 60) || 'Divers', baseUnit, purchaseUnit: requireString(body.purchaseUnit, 'UnitÃ© d’achat', 1, 60), purchaseFactorMilli: factor, minStockMilli: minStock, purchasePriceCents: body.purchasePrice === undefined || body.purchasePrice === '' ? 0 : toCents(body.purchasePrice), salePriceCents: body.salePrice === undefined || body.salePrice === '' ? 0 : toCents(body.salePrice) };
+    };
+    if (request.method === 'POST' && path === '/products') {
+      permit(user, 'products.manage'); const input = await productInput();
+      const { data, error } = await db.from('Product').insert({ id: crypto.randomUUID(), ...input, stockMilli: 0, active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).select('*').single();
+      if (error) databaseError(error); await audit(user.id, 'PRODUCT_CREATE', 'Product', data.id, data.internalCode); return json(data, 201);
+    }
+    const productMatch = path.match(/^\/products\/([^/]+)$/);
+    if (request.method === 'PUT' && productMatch) {
+      permit(user, 'products.manage');
+      const { data: previous, error: previousError } = await db.from('Product').select('*').eq('id', productMatch[1]).single();
+      if (previousError || !previous) databaseError(previousError);
+      const input = await productInput(previous.internalCode);
+      if ((input.baseUnit !== previous.baseUnit || input.purchaseFactorMilli !== previous.purchaseFactorMilli) && previous.stockMilli !== 0) fail(400, 'UnitÃ©s verrouillÃ©es : article dÃ©jÃ  utilisÃ©.');
+      const { data, error } = await db.from('Product').update({ ...input, updatedAt: new Date().toISOString() }).eq('id', previous.id).select('*').single();
+      if (error) databaseError(error); await audit(user.id, 'PRODUCT_UPDATE', 'Product', data.id, data.internalCode); return json(data);
+    }
+    const productStatus = path.match(/^\/products\/([^/]+)\/status$/);
+    if (request.method === 'PATCH' && productStatus) {
+      permit(user, 'products.archive'); const body = await request.json(); if (typeof body.active !== 'boolean') fail(400, 'Statut invalide.');
+      const { data, error } = await db.from('Product').update({ active: body.active, updatedAt: new Date().toISOString() }).eq('id', productStatus[1]).select('*').single();
+      if (error) databaseError(error); await audit(user.id, 'PRODUCT_STATUS', 'Product', data.id, String(body.active)); return json(data);
+    }
+    const barcodeMatch = path.match(/^\/products\/([^/]+)\/generate-barcode$/);
+    if (request.method === 'POST' && barcodeMatch) {
+      permit(user, 'products.manage'); const { data: product, error: readError } = await db.from('Product').select('*').eq('id', barcodeMatch[1]).single();
+      if (readError || !product) databaseError(readError); if (product.barcode) fail(400, 'Cet article dispose dÃ©jÃ  d’un code-barres.');
+      const barcode = `GA-${product.internalCode}`;
+      const { data, error } = await db.from('Product').update({ barcode, updatedAt: new Date().toISOString() }).eq('id', product.id).is('barcode', null).select('*').single();
+      if (error || !data) databaseError(error); await audit(user.id, 'BARCODE_GENERATE', 'Product', data.id, barcode); return json(data);
     }
 
     if (request.method === 'GET' && path === '/cash/current') {
