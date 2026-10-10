@@ -30,6 +30,16 @@ const requireString = (value: unknown, label: string, min = 1, max = 500) => {
   if (result.length < min || result.length > max) fail(400, `${label} invalide.`);
   return result;
 };
+const toMilli = (value: unknown, label = 'QuantitÃ©') => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0 || Math.abs(number * 1000 - Math.round(number * 1000)) > 0.000001) fail(400, `${label} invalide.`);
+  return Math.round(number * 1000);
+};
+const toCents = (value: unknown) => {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || Math.abs(number * 100 - Math.round(number * 100)) > 0.000001) fail(400, 'Prix invalide.');
+  return Math.round(number * 100);
+};
 const userView = (user: any) => ({ id: user.id, name: user.name, username: user.username || user.email, role: user.role, active: user.active });
 const reference = (prefix: string) => `${prefix}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${crypto.randomUUID().slice(0, 5).toUpperCase()}`;
 
@@ -117,6 +127,26 @@ Deno.serve(async request => {
       const { data, error } = await db.from('CashSession').select('*').is('closedAt', null).order('openedAt', { ascending: false }).limit(1).maybeSingle();
       if (error) databaseError(error);
       return json(data);
+    }
+
+    if (request.method === 'POST' && path === '/sales') {
+      permit(user, 'sales.create');
+      const body = await request.json();
+      const paymentMethod = ['CASH', 'CARD', 'CREDIT'].includes(body.paymentMethod) ? body.paymentMethod : 'CASH';
+      if (!Array.isArray(body.lines) || body.lines.length < 1 || body.lines.length > 100) fail(400, 'Une vente doit contenir entre 1 et 100 articles.');
+      const lines = body.lines.map((line: any) => ({
+        productId: requireString(line.productId, 'Article', 1, 100),
+        qtyMilli: toMilli(line.quantity),
+        sellUnit: line.sellUnit === 'BASE' ? 'BASE' : line.sellUnit === 'PURCHASE' ? 'PURCHASE' : fail(400, 'UnitÃ© de vente invalide.'),
+        priceCents: line.price === undefined || line.price === null || line.price === '' ? null : toCents(line.price),
+      }));
+      if (new Set(lines.map((line: any) => `${line.productId}:${line.sellUnit}`)).size !== lines.length) fail(400, 'Fusionnez les lignes rÃ©pÃ©tÃ©es du mÃªme article.');
+      const { data, error } = await db.rpc('station_create_sale', {
+        p_user_id: user.id, p_client: clean(body.client).slice(0, 120), p_payment_method: paymentMethod,
+        p_cash_session_id: body.cashSessionId || null, p_lines: lines,
+      });
+      if (error) fail(400, error.message);
+      return json(data, 201);
     }
 
     return json({ error: `Route inconnue : ${request.method} ${path}` }, 404);
