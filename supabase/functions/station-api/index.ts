@@ -277,6 +277,37 @@ Deno.serve(async request => {
       }));
     }
 
+    if (request.method === 'GET' && path === '/purchases') {
+      permit(user, 'purchases.view');
+      const { data, error } = await db.from('PurchaseRequest').select('*,supplierRef:Supplier!PurchaseRequest_supplierId_fkey(*),createdBy:User!PurchaseRequest_createdById_fkey(name),approvedBy:User!PurchaseRequest_approvedById_fkey(name),lines:PurchaseLine(*,product:Product(*)),receptions:Reception(id,ref,createdAt)').order('createdAt', { ascending: false }).limit(300);
+      if (error) databaseError(error); return json(data);
+    }
+    if (request.method === 'POST' && path === '/purchases') {
+      permit(user, 'purchases.create'); const body = await request.json();
+      if (!Array.isArray(body.lines) || !body.lines.length || body.lines.length > 100) fail(400, 'Une demande doit contenir des articles.');
+      const ids = body.lines.map((line: any) => requireString(line.productId, 'Article', 1, 100));
+      if (new Set(ids).size !== ids.length) fail(400, 'Un article ne peut figurer qu’une fois.');
+      const { data: products, error: productError } = await db.from('Product').select('*').in('id', ids).eq('active', true);
+      if (productError || products.length !== ids.length) fail(404, 'Un ou plusieurs articles sont indisponibles.');
+      let supplierName = clean(body.supplier).slice(0, 120); const supplierId = body.supplierId || null;
+      if (supplierId) { const { data: supplier, error } = await db.from('Supplier').select('id,name').eq('id', supplierId).eq('active', true).single(); if (error || !supplier) fail(404, 'Fournisseur introuvable ou inactif.'); supplierName = supplier.name; }
+      const requestId = crypto.randomUUID(); const now = new Date().toISOString();
+      const { data: purchase, error } = await db.from('PurchaseRequest').insert({ id: requestId, ref: reference('DA'), supplier: supplierName, supplierId, notes: clean(body.notes).slice(0, 500), status: 'PENDING', createdById: user.id, createdAt: now, updatedAt: now }).select('*').single();
+      if (error) databaseError(error);
+      const byId = Object.fromEntries(products.map((product: any) => [product.id, product]));
+      const lines = body.lines.map((line: any) => ({ id: crypto.randomUUID(), requestId, productId: line.productId, requestedMilli: toMilli(line.quantity), receivedMilli: 0, unitPriceCents: line.price === undefined || line.price === '' ? byId[line.productId].purchasePriceCents : toCents(line.price) }));
+      const { error: lineError } = await db.from('PurchaseLine').insert(lines); if (lineError) databaseError(lineError);
+      await audit(user.id, 'PURCHASE_REQUEST', 'PurchaseRequest', requestId, purchase.ref); return json({ ...purchase, lines }, 201);
+    }
+    const decisionMatch = path.match(/^\/purchases\/([^/]+)\/decision$/);
+    if (request.method === 'POST' && decisionMatch) {
+      permit(user, 'purchases.approve'); const body = await request.json(); if (!['APPROVED', 'REJECTED'].includes(body.decision)) fail(400, 'DÃ©cision invalide.');
+      const { data: purchase, error: readError } = await db.from('PurchaseRequest').select('*').eq('id', decisionMatch[1]).single();
+      if (readError || !purchase) databaseError(readError); if (purchase.createdById === user.id) fail(400, 'Un responsable ne peut pas approuver sa propre demande.');
+      const { data, error } = await db.from('PurchaseRequest').update({ status: body.decision, approvedById: user.id, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).eq('id', purchase.id).eq('status', 'PENDING').select('*').single();
+      if (error || !data) fail(409, 'Demande dÃ©jÃ  traitÃ©e.'); await audit(user.id, body.decision, 'PurchaseRequest', data.id, data.ref); return json(data);
+    }
+
     if (request.method === 'POST' && path === '/sales') {
       permit(user, 'sales.create');
       const body = await request.json();
