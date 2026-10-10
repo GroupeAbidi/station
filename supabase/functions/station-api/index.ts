@@ -307,6 +307,16 @@ Deno.serve(async request => {
       const { data, error } = await db.from('PurchaseRequest').update({ status: body.decision, approvedById: user.id, approvedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).eq('id', purchase.id).eq('status', 'PENDING').select('*').single();
       if (error || !data) fail(409, 'Demande dÃ©jÃ  traitÃ©e.'); await audit(user.id, body.decision, 'PurchaseRequest', data.id, data.ref); return json(data);
     }
+    if (request.method === 'GET' && path === '/receptions') {
+      permit(user, 'receptions.view'); const { data, error } = await db.from('Reception').select('*,request:PurchaseRequest(ref,supplier,supplierRef:Supplier(*)),createdBy:User(name),lines:ReceptionLine(*,product:Product(*))').order('createdAt', { ascending: false }).limit(300); if (error) databaseError(error); return json(data);
+    }
+    if (request.method === 'POST' && path === '/receptions') {
+      permit(user, 'receptions.create'); const body = await request.json(); if (!Array.isArray(body.lines) || !body.lines.length) fail(400, 'Saisissez au moins une quantitÃ©.');
+      const lines = body.lines.map((line: any) => ({ purchaseLineId: requireString(line.purchaseLineId, 'Ligne', 1, 100), quantityMilli: toMilli(line.quantity) }));
+      if (new Set(lines.map((line: any) => line.purchaseLineId)).size !== lines.length) fail(400, 'Lignes de rÃ©ception en double.');
+      const { data, error } = await db.rpc('station_receive_goods', { p_user_id: user.id, p_request_id: requireString(body.requestId, 'Demande', 1, 100), p_note: clean(body.note).slice(0, 500), p_lines: lines });
+      if (error) fail(400, error.message); return json(data, 201);
+    }
 
     if (request.method === 'POST' && path === '/sales') {
       permit(user, 'sales.create');
