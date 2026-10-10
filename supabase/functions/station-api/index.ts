@@ -105,6 +105,41 @@ Deno.serve(async request => {
       return json({ ok: true });
     }
 
+    if (request.method === 'GET' && path === '/users') {
+      permit(user, 'users.manage');
+      const { data, error } = await db.from('User').select('id,name,username,role,active,createdAt').order('createdAt');
+      if (error) databaseError(error);
+      return json(data);
+    }
+    if (request.method === 'POST' && path === '/users') {
+      permit(user, 'users.manage');
+      const body = await request.json();
+      const name = requireString(body.name, 'Nom', 2, 90);
+      const username = requireString(body.username, 'Nom utilisateur', 3, 40).toLowerCase();
+      if (!/^[a-z0-9._-]+$/.test(username)) fail(400, 'Nom utilisateur invalide.');
+      const password = requireString(body.password, 'Mot de passe', 12, 120);
+      if (!['MANAGER', 'MAGASIN', 'VENTES'].includes(body.role)) fail(400, 'RÃ´le invalide.');
+      const { data, error } = await db.from('User').insert({ id: crypto.randomUUID(), name, username, passwordHash: await bcrypt.hash(password, 12), role: body.role, active: true }).select('*').single();
+      if (error) databaseError(error);
+      await audit(user.id, 'USER_CREATE', 'User', data.id, username);
+      return json(userView(data), 201);
+    }
+    const userMatch = path.match(/^\/users\/([^/]+)$/);
+    if (request.method === 'PATCH' && userMatch) {
+      permit(user, 'users.manage');
+      const body = await request.json();
+      if (user.id === userMatch[1] && (body.active === false || (body.role && body.role !== 'MANAGER'))) fail(400, 'Impossible de modifier votre propre accÃ¨s responsable.');
+      const update: Record<string, unknown> = {};
+      if (typeof body.active === 'boolean') update.active = body.active;
+      if (body.role) { if (!['MANAGER', 'MAGASIN', 'VENTES'].includes(body.role)) fail(400, 'RÃ´le invalide.'); update.role = body.role; }
+      if (body.password) update.passwordHash = await bcrypt.hash(requireString(body.password, 'Mot de passe', 12, 120), 12);
+      if (!Object.keys(update).length) fail(400, 'Aucune modification.');
+      const { data, error } = await db.from('User').update(update).eq('id', userMatch[1]).select('*').single();
+      if (error) databaseError(error);
+      await audit(user.id, 'USER_UPDATE', 'User', data.id, JSON.stringify({ active: body.active, role: body.role, passwordReset: !!body.password }));
+      return json(userView(data));
+    }
+
     if (request.method === 'GET' && path === '/products') {
       const all = new URL(request.url).searchParams.get('all') === '1' && user.role !== 'VENTES';
       const query = db.from('Product').select('*').order('name');
