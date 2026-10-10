@@ -140,6 +140,37 @@ Deno.serve(async request => {
       return json(userView(data));
     }
 
+    if (request.method === 'GET' && path === '/suppliers') {
+      permit(user, 'suppliers.manage');
+      const { data, error } = await db.from('Supplier').select('*').eq('active', true).order('name');
+      if (error) databaseError(error);
+      return json(data);
+    }
+    const supplierInput = async () => {
+      const body = await request.json();
+      const supplierCode = requireString(body.supplierCode, 'Identifiant fournisseur', 1, 24).toUpperCase();
+      if (!/^[A-Z0-9_-]+$/.test(supplierCode)) fail(400, 'Identifiant fournisseur invalide.');
+      const email = clean(body.email); if (email && !/^\S+@\S+\.\S+$/.test(email)) fail(400, 'Email fournisseur invalide.');
+      return { supplierCode, name: requireString(body.name, 'Nom fournisseur', 2, 120), contactName: clean(body.contactName).slice(0, 120), phone: clean(body.phone).slice(0, 40), email, address: clean(body.address).slice(0, 240), notes: clean(body.notes).slice(0, 500) };
+    };
+    if (request.method === 'POST' && path === '/suppliers') {
+      permit(user, 'suppliers.manage'); const input = await supplierInput();
+      const { data, error } = await db.from('Supplier').insert({ id: crypto.randomUUID(), ...input, active: true, createdById: user.id, updatedAt: new Date().toISOString() }).select('*').single();
+      if (error) databaseError(error); await audit(user.id, 'SUPPLIER_CREATE', 'Supplier', data.id, data.name); return json(data, 201);
+    }
+    const supplierMatch = path.match(/^\/suppliers\/([^/]+)$/);
+    if (request.method === 'PUT' && supplierMatch) {
+      permit(user, 'suppliers.manage'); const input = await supplierInput();
+      const { data, error } = await db.from('Supplier').update({ ...input, updatedAt: new Date().toISOString() }).eq('id', supplierMatch[1]).select('*').single();
+      if (error) databaseError(error); await audit(user.id, 'SUPPLIER_UPDATE', 'Supplier', data.id, data.name); return json(data);
+    }
+    const supplierStatus = path.match(/^\/suppliers\/([^/]+)\/status$/);
+    if (request.method === 'PATCH' && supplierStatus) {
+      permit(user, 'suppliers.manage'); const body = await request.json(); if (typeof body.active !== 'boolean') fail(400, 'Statut invalide.');
+      const { data, error } = await db.from('Supplier').update({ active: body.active, updatedAt: new Date().toISOString() }).eq('id', supplierStatus[1]).select('*').single();
+      if (error) databaseError(error); await audit(user.id, 'SUPPLIER_STATUS', 'Supplier', data.id, String(body.active)); return json(data);
+    }
+
     if (request.method === 'GET' && path === '/products') {
       const all = new URL(request.url).searchParams.get('all') === '1' && user.role !== 'VENTES';
       const query = db.from('Product').select('*').order('name');
