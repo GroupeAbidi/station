@@ -238,6 +238,44 @@ Deno.serve(async request => {
       if (error) databaseError(error);
       return json(data);
     }
+    if (request.method === 'GET' && path === '/cash/settings') {
+      permit(user, 'cash.manage');
+      let { data, error } = await db.from('CashSetting').select('*').eq('id', 1).maybeSingle();
+      if (!data) ({ data, error } = await db.from('CashSetting').insert({ id: 1, defaultOpeningCents: 1000000, updatedAt: new Date().toISOString() }).select('*').single());
+      if (error) databaseError(error); return json(data);
+    }
+    if (request.method === 'PUT' && path === '/cash/settings') {
+      permit(user, 'cash.configure'); const body = await request.json(); const opening = Number(body.defaultOpeningCents);
+      if (!Number.isSafeInteger(opening) || opening < 0) fail(400, 'Montant invalide.');
+      const { data, error } = await db.from('CashSetting').upsert({ id: 1, defaultOpeningCents: opening, updatedAt: new Date().toISOString() }).select('*').single();
+      if (error) databaseError(error); await audit(user.id, 'CASH_SETTING_UPDATE', 'CashSetting', '1', String(opening)); return json(data);
+    }
+    if (request.method === 'POST' && path === '/cash/open') {
+      permit(user, 'cash.manage'); const body = await request.json(); const opening = Number(body.openingCents);
+      if (!Number.isSafeInteger(opening) || opening < 0) fail(400, 'Montant invalide.');
+      const { data: active, error: activeError } = await db.from('CashSession').select('id').is('closedAt', null).maybeSingle();
+      if (activeError) databaseError(activeError); if (active) fail(400, 'Une caisse est dÃ©jÃ  ouverte.');
+      const { data, error } = await db.from('CashSession').insert({ id: crypto.randomUUID(), userId: user.id, openingCents: opening }).select('*').single();
+      if (error) databaseError(error); await audit(user.id, 'CASH_OPEN', 'CashSession', data.id, String(opening)); return json(data, 201);
+    }
+    if (request.method === 'POST' && path === '/cash/close') {
+      permit(user, 'cash.manage'); const body = await request.json(); const closing = Number(body.closingCents);
+      if (!Number.isSafeInteger(closing) || closing < 0) fail(400, 'Montant invalide.');
+      const { data: active, error: activeError } = await db.from('CashSession').select('*').is('closedAt', null).order('openedAt', { ascending: false }).limit(1).maybeSingle();
+      if (activeError) databaseError(activeError); if (!active) fail(400, 'Aucune caisse ouverte.');
+      const { data, error } = await db.from('CashSession').update({ closingCents: closing, closedAt: new Date().toISOString() }).eq('id', active.id).select('*').single();
+      if (error) databaseError(error); await audit(user.id, 'CASH_CLOSE', 'CashSession', data.id, String(closing)); return json(data);
+    }
+    if (request.method === 'GET' && path === '/cash/sessions') {
+      permit(user, 'cash.manage');
+      const { data, error } = await db.from('CashSession').select('*,user:User!CashSession_userId_fkey(name,username),sales:Sale(totalCents,paymentMethod)').order('openedAt', { ascending: false }).limit(200);
+      if (error) databaseError(error);
+      return json(data.map((session: any) => {
+        const cashSalesCents = (session.sales || []).filter((sale: any) => sale.paymentMethod === 'CASH').reduce((sum: number, sale: any) => sum + sale.totalCents, 0);
+        const expectedCents = session.openingCents + cashSalesCents;
+        return { id: session.id, openedAt: session.openedAt, closedAt: session.closedAt, openingCents: session.openingCents, closingCents: session.closingCents, cashSalesCents, expectedCents, differenceCents: session.closingCents === null ? null : session.closingCents - expectedCents, user: session.user };
+      }));
+    }
 
     if (request.method === 'POST' && path === '/sales') {
       permit(user, 'sales.create');

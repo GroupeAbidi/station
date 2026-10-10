@@ -1,13 +1,13 @@
 import React from 'react';
 import { Banknote, CheckCircle2, Clock3, Download, XCircle } from 'lucide-react';
 import { Button, Empty, FormField, PageHeading, Panel } from '../components/UI';
-import { post, put } from '../api';
+import { api, post, put } from '../api';
 import { da, dateTime, downloadCSV, num } from '../utils';
 
 export default function Cash({ sessions = [], user, toast, changed }) {
   const [defaultOpening, setDefaultOpening] = React.useState('10000');
   const [saving, setSaving] = React.useState(false);
-  React.useEffect(() => { fetch('/api/cash/settings', { headers: { Authorization: `Bearer ${sessionStorage.getItem('magasinpro_token')}` } }).then(response=>response.json()).then(setting=>setDefaultOpening(String(setting.defaultOpeningCents / 100))).catch(()=>{}); }, []);
+  React.useEffect(() => { api('/cash/settings').then(setting=>setDefaultOpening(String(setting.defaultOpeningCents / 100))).catch(()=>{}); }, []);
   const saveDefault = async event => { event.preventDefault(); setSaving(true); try { await put('/cash/settings', { defaultOpeningCents: Math.round(Number(defaultOpening || 0) * 100) }); toast('Montant initial par défaut enregistré.'); } catch (error) { toast(error.message, 'error'); } finally { setSaving(false); } };
   const open = sessions.filter(session => !session.closedAt);
   const closed = sessions.filter(session => session.closedAt);
