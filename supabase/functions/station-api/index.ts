@@ -3,7 +3,8 @@ import bcrypt from 'npm:bcryptjs@2.4.3';
 import { SignJWT, jwtVerify } from 'npm:jose@5.10.0';
 
 const url = Deno.env.get('SUPABASE_URL')!;
-const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS') || '{}');
+const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Object.values(secretKeys)[0] as string;
 const jwtSecret = Deno.env.get('STATION_JWT_SECRET')!;
 const db = createClient(url, serviceKey, { auth: { persistSession: false } });
 const key = new TextEncoder().encode(jwtSecret);
