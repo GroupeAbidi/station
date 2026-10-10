@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test lecteur code-barres</title>
+  <style>
+    :root { font-family: Arial, sans-serif; color: #172942; background: #f4f7fb; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 20px; }
+    main { width: min(620px, 100%); background: white; border: 1px solid #dce5f0; border-radius: 14px; padding: 28px; box-shadow: 0 8px 30px #173a7c12; }
+    h1 { margin: 0 0 8px; font-size: 24px; }
+    p { color: #5c6c82; line-height: 1.5; }
+    label { display: block; margin: 24px 0 8px; font-weight: 700; }
+    input { width: 100%; box-sizing: border-box; border: 2px solid #155bd0; border-radius: 9px; padding: 14px; font-size: 20px; }
+    .result { margin-top: 22px; padding: 18px; border-radius: 10px; background: #eef5ff; }
+    .result strong { display: block; font-size: 25px; overflow-wrap: anywhere; }
+    .ok { color: #16744d; }
+    .warning { color: #a05a00; }
+    button { margin-top: 14px; border: 0; border-radius: 8px; padding: 10px 14px; background: #155bd0; color: white; font-weight: 700; cursor: pointer; }
+    code { background: #eef1f5; padding: 2px 5px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Test du lecteur code-barres</h1>
+    <p>Branchez le lecteur USB, cliquez dans le champ, puis scannez un code. Cette page est indépendante de Station Magazine.</p>
+    <label for="scanner">Champ de test</label>
+    <input id="scanner" autofocus autocomplete="off" placeholder="Scannez ici...">
+    <div class="result">
+      <span>Dernier code reçu :</span>
+      <strong id="code">Aucun scan</strong>
+      <p id="status" class="warning">En attente du lecteur...</p>
+    </div>
+    <button id="clear" type="button">Effacer</button>
+    <p>Si le code apparaît mais que le logiciel ne réagit pas, le lecteur fonctionne. Vérifiez alors le code-barres enregistré dans l'article.</p>
+  </main>
+  <script>
+    const input = document.querySelector('#scanner');
+    const code = document.querySelector('#code');
+    const status = document.querySelector('#status');
+    let timer;
+    function show(value, suffix) {
+      const clean = value.trim();
+      if (!clean) return;
+      code.textContent = clean;
+      status.textContent = suffix ? 'Lecteur fonctionnel : suffixe Entrée détecté.' : 'Code reçu. Aucun suffixe Entrée détecté.';
+      status.className = suffix ? 'ok' : 'warning';
+      input.value = '';
+    }
+    input.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        clearTimeout(timer);
+        show(input.value, true);
+      }
+    });
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => show(input.value, false), 500);
+    });
+    document.querySelector('#clear').addEventListener('click', () => {
+      input.value = '';
+      code.textContent = 'Aucun scan';
+      status.textContent = 'En attente du lecteur...';
+      status.className = 'warning';
+      input.focus();
+    });
+    input.focus();
+  </script>
+</body>
+</html>

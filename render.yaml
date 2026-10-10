@@ -1,0 +1,25 @@
+databases:
+  - name: station-magazine-db
+    databaseName: station_magazine
+    user: station_magazine
+
+services:
+  - type: web
+    runtime: node
+    name: station-magazine
+    buildCommand: npm ci && npx prisma generate --schema prisma/schema.postgresql.prisma && npm run build:production
+    startCommand: npm run start:production
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: station-magazine-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: MANAGER_PASSWORD
+        generateValue: true
+      - key: MAGASIN_PASSWORD
+        generateValue: true
+      - key: VENDEUR_PASSWORD
+        generateValue: true
