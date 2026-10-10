@@ -1,0 +1,4 @@
+project_id = "station-magazine"
+
+[functions.station-api]
+verify_jwt = false

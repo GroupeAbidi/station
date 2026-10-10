@@ -1,9 +1,10 @@
 const TOKEN_KEY = 'magasinpro_token';
+const API_BASE = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
 export const getToken = () => sessionStorage.getItem(TOKEN_KEY);
 export const setToken = token => token ? sessionStorage.setItem(TOKEN_KEY, token) : sessionStorage.removeItem(TOKEN_KEY);
 export async function api(path, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}) };
-  const response = await fetch(`/api${path}`, { ...options, headers: { ...headers, ...options.headers } });
+  const response = await fetch(`${API_BASE}${path}`, { ...options, headers: { ...headers, ...options.headers } });
   let payload;
   try { payload = await response.json(); } catch { throw new Error('Réponse serveur illisible. Le serveur API est-il démarré ?'); }
   if (!response.ok) {
