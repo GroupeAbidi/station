@@ -327,6 +327,27 @@ Deno.serve(async request => {
       if (error) fail(400, error.message);
       return json(data, 201);
     }
+    if (request.method === 'GET' && path === '/sales') {
+      permit(user, 'sales.view');
+      let query = db.from('Sale').select('*,createdBy:User!Sale_createdById_fkey(name,username),lines:SaleLine(*,product:Product(*))').order('createdAt', { ascending: false }).limit(300);
+      if (user.role === 'VENTES') query = query.eq('createdById', user.id);
+      const { data, error } = await query; if (error) databaseError(error);
+      return json(user.role === 'VENTES' ? data.map((sale: any) => ({ ...sale, lines: sale.lines.map((line: any) => { const { purchasePriceCents, ...product } = line.product; return { ...line, product }; }) })) : data);
+    }
+
+    if (request.method === 'GET' && path === '/reports/profit') {
+      permit(user, 'reports.profit');
+      const { data, error } = await db.from('Sale').select('id,ref,createdAt,totalCents,paymentMethod,lines:SaleLine(costCents)').order('createdAt', { ascending: false }).limit(500);
+      if (error) databaseError(error); return json(data.map((sale: any) => ({ id: sale.id, ref: sale.ref, createdAt: sale.createdAt, totalCents: sale.totalCents, paymentMethod: sale.paymentMethod, costCents: sale.lines.reduce((sum: number, line: any) => sum + line.costCents, 0), profitCents: sale.totalCents - sale.lines.reduce((sum: number, line: any) => sum + line.costCents, 0) })));
+    }
+    if (request.method === 'GET' && path === '/movements') {
+      permit(user, 'movements.view'); const productId = new URL(request.url).searchParams.get('productId');
+      let query = db.from('StockMovement').select('*,product:Product(name,internalCode,baseUnit),user:User(name)').order('createdAt', { ascending: false }).limit(500); if (productId) query = query.eq('productId', productId);
+      const { data, error } = await query; if (error) databaseError(error); return json(data);
+    }
+    if (request.method === 'GET' && path === '/audit') {
+      permit(user, 'audit.view'); const { data, error } = await db.from('AuditEvent').select('*,user:User(name)').order('createdAt', { ascending: false }).limit(200); if (error) databaseError(error); return json(data);
+    }
 
     return json({ error: `Route inconnue : ${request.method} ${path}` }, 404);
   } catch (error) {
