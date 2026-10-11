@@ -30,6 +30,7 @@ export default function Home({user,data,go}) {
       <div className="vendor-action"><div><small>ACTION PRINCIPALE</small><h3>Prêt pour une nouvelle vente ?</h3><p>Utilisez votre lecteur de code-barres ou recherchez un article.</p></div><button onClick={()=>go('sales')}><ScanBarcode size={20}/> Ouvrir la caisse <ArrowRight size={18}/></button></div>
       <h3 className="workspace-section-title">Mes dernières ventes</h3>
       <div className="recent-simple">{mySales.slice(0,5).map(s=><div key={s.id}><span className="sale-logo"><ShoppingBag size={18}/></span><div><b>{s.ref}</b><small>{s.client||'Client comptoir'} · {dateTime(s.createdAt)}</small></div><strong>{da(s.totalCents)}</strong></div>)}{!mySales.length&&<div className="simple-empty">Vous n’avez encore enregistré aucune vente.</div>}</div>
+      <div className="recent-simple sale-history">{mySales.slice(0,5).map(s=><div className="sale-history-row" key={s.id}><span className="sale-logo"><ShoppingBag size={18}/></span><div className="sale-history-body"><div className="sale-history-head"><div><b>{s.ref}</b><small>{s.client||'Client comptoir'} - {dateTime(s.createdAt)}</small></div><strong>{da(s.totalCents)}</strong></div><div className="sale-history-lines">{(s.lines||[]).map(line=><div key={line.id}><span>{line.product.name}</span><span>{num(quantity(line.qtyBaseMilli),3)} {line.product.baseUnit} x {da(line.priceCents)}</span><b>{da(line.totalCents)}</b></div>)}</div></div></div>)}{!mySales.length&&<div className="simple-empty">Aucune vente enregistree.</div>}</div>
     </>}
   </div>;
 }
