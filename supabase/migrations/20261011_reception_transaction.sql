@@ -1,6 +1,6 @@
 CREATE OR REPLACE FUNCTION public.station_receive_goods(p_user_id text, p_request_id text, p_note text, p_lines jsonb)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions AS $$
-DECLARE req "PurchaseRequest"%ROWTYPE; receipt_id text := extensions.gen_random_uuid()::text; ref text := 'REC-' || to_char(now(), 'YYYYMMDDHH24MISS') || '-' || upper(substr(replace(extensions.gen_random_uuid()::text, '-', ''),1,5)); item record; line "PurchaseLine"%ROWTYPE; product "Product"%ROWTYPE; qty integer; base integer; status text;
+DECLARE req "PurchaseRequest"%ROWTYPE; receipt_id text := extensions.gen_random_uuid()::text; ref text := 'REC-' || to_char(now(), 'YYYYMMDDHH24MISS') || '-' || upper(substr(replace(extensions.gen_random_uuid()::text, '-', ''),1,5)); item record; line "PurchaseLine"%ROWTYPE; product "Product"%ROWTYPE; qty integer; base integer; v_status text;
 BEGIN
   SELECT * INTO req FROM "PurchaseRequest" WHERE "id" = p_request_id FOR UPDATE;
   IF NOT FOUND OR req."status" NOT IN ('APPROVED','PARTIAL') THEN RAISE EXCEPTION 'La demande doit être approuvée et non terminée.'; END IF;
@@ -18,8 +18,8 @@ BEGIN
     UPDATE "Product" SET "stockMilli" = "stockMilli" + base, "updatedAt" = now() WHERE "id" = product."id";
     INSERT INTO "StockMovement" ("id","productId","deltaMilli","balanceAfterMilli","type","sourceRef","note","userId") VALUES (extensions.gen_random_uuid()::text,product."id",base,product."stockMilli" + base,'RECEPTION',ref,COALESCE(p_note,''),p_user_id);
   END LOOP;
-  SELECT CASE WHEN bool_and("receivedMilli" = "requestedMilli") THEN 'RECEIVED' ELSE 'PARTIAL' END INTO status FROM "PurchaseLine" WHERE "requestId" = p_request_id;
-  UPDATE "PurchaseRequest" SET "status" = status, "updatedAt" = now() WHERE "id" = p_request_id;
+  SELECT CASE WHEN bool_and("receivedMilli" = "requestedMilli") THEN 'RECEIVED' ELSE 'PARTIAL' END INTO v_status FROM "PurchaseLine" WHERE "requestId" = p_request_id;
+  UPDATE "PurchaseRequest" SET "status" = v_status, "updatedAt" = now() WHERE "id" = p_request_id;
   INSERT INTO "AuditEvent" ("id","userId","action","entityType","entityId","details") VALUES (extensions.gen_random_uuid()::text,p_user_id,'GOODS_RECEIPT','Reception',receipt_id,ref || ' ' || req."ref");
-  RETURN jsonb_build_object('id',receipt_id,'ref',ref,'status',status);
+  RETURN jsonb_build_object('id',receipt_id,'ref',ref,'status',v_status);
 END; $$;
