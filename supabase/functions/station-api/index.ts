@@ -62,7 +62,7 @@ function permit(user: any, permission: string) {
   if (!permissions[user.role]?.includes(permission)) fail(403, 'AccÃ¨s non autorisÃ© pour votre rÃ´le.');
 }
 async function audit(userId: string, action: string, entityType: string, entityId: string, details = '') {
-  const { error } = await db.from('AuditEvent').insert({ userId, action, entityType, entityId, details: details.slice(0, 900) });
+  const { error } = await db.from('AuditEvent').insert({ id: crypto.randomUUID(), userId, action, entityType, entityId, details: details.slice(0, 900) });
   if (error) throw error;
 }
 function databaseError(error: any): never {
