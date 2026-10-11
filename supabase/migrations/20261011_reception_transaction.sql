@@ -11,7 +11,9 @@ BEGIN
     IF NOT FOUND OR item."quantityMilli" IS NULL OR item."quantityMilli" <= 0 OR item."quantityMilli" > line."requestedMilli" - line."receivedMilli" THEN RAISE EXCEPTION 'Quantité de réception invalide.'; END IF;
     SELECT * INTO product FROM "Product" WHERE "id" = line."productId" AND "active" = true FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Article inactif.'; END IF;
-    qty := item."quantityMilli"; base := qty * product."purchaseFactorMilli" / 1000;
+    qty := item."quantityMilli";
+    -- Multiply as bigint first: e.g. 1,000 citernes of 200 L must not overflow an integer mid-calculation.
+    base := (qty::bigint * product."purchaseFactorMilli"::bigint / 1000)::integer;
     IF product."baseUnit" = 'PCE' AND mod(base,1000) <> 0 THEN RAISE EXCEPTION 'Les pièces doivent avoir une quantité entière.'; END IF;
     INSERT INTO "ReceptionLine" ("id","receptionId","productId","qtyPurchaseMilli","qtyBaseMilli") VALUES (extensions.gen_random_uuid()::text,receipt_id,product."id",qty,base);
     UPDATE "PurchaseLine" SET "receivedMilli" = "receivedMilli" + qty WHERE "id" = line."id";
