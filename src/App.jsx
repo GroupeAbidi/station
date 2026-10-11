@@ -139,7 +139,7 @@ export default function App() {
   const [settingsOpen,setSettingsOpen] = useState(false);
   const [preselect,setPreselect] = useState(null);
   const toast = useCallback((text,type='success') => setMessage({message:text,type,id:Date.now()}),[]);
-  const load = useCallback(async (person,begin=false) => {
+  const load = useCallback(async (person,begin=false,quiet=false) => {
     if (!person) return;
     if (begin) setLoading(true); else setRefreshing(true);
     try {
@@ -147,10 +147,17 @@ export default function App() {
         ? ['products','purchases','receptions','sales','movements','dashboard','users','suppliers','profit','cash','audit']
         : person.role === 'MAGASIN' ? ['products','purchases','receptions','movements','suppliers']
         : ['products','sales'];
-      const result = await Promise.all(paths.map(k => api(k === 'profit' ? '/reports/profit' : k === 'cash' ? '/cash/sessions' : '/'+k)));
-      const fresh = { ...initial }; paths.forEach((key,index)=>{fresh[key === 'audit' ? 'audits' : key] = result[index]});
-      setData(fresh);
-    } catch(err) { toast(err.message,'error'); }
+      const results = await Promise.allSettled(paths.map(k => api(k === 'profit' ? '/reports/profit' : k === 'cash' ? '/cash/sessions' : '/'+k)));
+      const fresh = {};
+      const failures = [];
+      results.forEach((result,index) => {
+        const key = paths[index] === 'audit' ? 'audits' : paths[index];
+        if (result.status === 'fulfilled') fresh[key] = result.value;
+        else failures.push(paths[index]);
+      });
+      setData(previous => ({ ...previous, ...fresh }));
+      if (failures.length && !quiet) toast(`Impossible d’actualiser : ${failures.join(', ')}.`, 'error');
+    } catch(err) { if (!quiet) toast(err.message,'error'); }
     finally {setLoading(false);setRefreshing(false);}
   },[toast]);
   useEffect(()=>{
@@ -171,7 +178,7 @@ export default function App() {
     setPage(dest);setMobile(false);window.scrollTo({top:0,behavior:'smooth'});
   };
   const logout=()=>{setToken(null);setUser(null);setData(initial);setMobile(false)};
-  const changed=()=>load(user);
+  const changed=()=>load(user,false,true);
   if(!user) return <><Login onLogin={onLogin} toast={toast}/><Toast toast={message} onClose={()=>setMessage(null)}/></>;
   const common={user,changed,toast};
   const content = () => {
