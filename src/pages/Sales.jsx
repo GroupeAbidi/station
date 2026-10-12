@@ -92,10 +92,10 @@ export default function Sales({ products, sales, changed, toast, user }) {
     <PageHeading eyebrow="POINT DE VENTE" title="Nouvelle vente" description="Scannez un article, ajustez les quantités, puis validez." actions={<div className="segmented"><button className={tab === 'POS' ? 'active' : ''} onClick={() => setTab('POS')}><ShoppingCart size={16}/> Vente</button><button className={tab === 'HISTORY' ? 'active' : ''} onClick={() => setTab('HISTORY')}><ReceiptText size={16}/> Historique</button></div>} />
     {tab === 'POS' ? <>
       <div className="vendor-pos">
-      <section className="vendor-catalogue">
-        <Panel title="Scanner ou chercher" subtitle="Scannez le code-barres ou recherchez un article.">
+      <section className="vendor-scanner-zone">
+        <div className="scanner-zone-content"><div className="scanner-zone-heading"><h2>Scanner ou chercher</h2><p>Scannez le code-barres ou recherchez un article.</p></div>
           <form className="scan-box vendor-scan" onSubmit={submitScan}><span className="scan-graphic"><ScanLine size={27}/></span><input ref={scanRef} autoFocus={permitted} value={scan} onChange={changeScan} placeholder="Scanner un code-barres ou saisir une référence" disabled={!permitted}/><button disabled={!scan.trim() || !permitted} type="submit" aria-label="Ajouter le code saisi"><Plus size={19}/></button></form>
-        </Panel>
+        </div>
       </section>
       <aside className="cart-panel vendor-cart">
         <div className="cart-head"><div className="cart-icon"><ShoppingBag size={22}/></div><div><h3>Panier</h3><small>{cart.length} article{cart.length > 1 ? 's' : ''}</small></div></div>
