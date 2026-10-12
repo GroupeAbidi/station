@@ -13,12 +13,15 @@ export default function Sales({ products, sales, changed, toast, user }) {
   const [tab, setTab] = useState('POS');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [cashSession, setCashSession] = useState(null);
+  const [cashAmount, setCashAmount] = useState('');
+  const [cashBusy, setCashBusy] = useState(false);
   const scanRef = useRef(null);
   const scanTimer = useRef(null);
   const scanBusy = useRef(false);
   const permitted = can(user, ['VENTES']);
 
-  useEffect(() => { api('/cash/current').then(setCashSession).catch(() => {}); }, []);
+  const loadCash = () => api('/cash/current').then(setCashSession).catch(() => setCashSession(null));
+  useEffect(() => { loadCash(); }, []);
   useEffect(() => {
     if (permitted && tab === 'POS') scanRef.current?.focus();
     return () => clearTimeout(scanTimer.current);
@@ -72,6 +75,18 @@ export default function Sales({ products, sales, changed, toast, user }) {
     } catch (error) { toast(error.message, 'error'); }
     finally { setSaving(false); }
   };
+  const openCash = async () => {
+    setCashBusy(true);
+    try { await post('/cash/open', { openingCents: Math.round(Number(cashAmount || 0) * 100) }); await loadCash(); setCashAmount(''); toast('Votre caisse est ouverte.'); }
+    catch (error) { toast(error.message, 'error'); }
+    finally { setCashBusy(false); }
+  };
+  const closeCash = async () => {
+    setCashBusy(true);
+    try { await post('/cash/close', { closingCents: Math.round(Number(cashAmount || 0) * 100) }); await loadCash(); setCashAmount(''); toast('Votre caisse est cloturee.'); }
+    catch (error) { toast(error.message, 'error'); }
+    finally { setCashBusy(false); }
+  };
 
   return <>
     <PageHeading eyebrow="POINT DE VENTE" title="Nouvelle vente" description="Scannez un article, ajustez les quantités, puis validez." actions={<div className="segmented"><button className={tab === 'POS' ? 'active' : ''} onClick={() => setTab('POS')}><ShoppingCart size={16}/> Vente</button><button className={tab === 'HISTORY' ? 'active' : ''} onClick={() => setTab('HISTORY')}><ReceiptText size={16}/> Historique</button></div>} />
@@ -88,6 +103,8 @@ export default function Sales({ products, sales, changed, toast, user }) {
           <div className="payment-row"><span>Paiement</span><div className="payment-options"><button className={paymentMethod === 'CASH' ? 'active' : ''} onClick={() => setPaymentMethod('CASH')}>Espèces</button><button className={paymentMethod === 'CARD' ? 'active' : ''} onClick={() => setPaymentMethod('CARD')}><CreditCard size={14}/> Carte</button><button className={paymentMethod === 'CREDIT' ? 'active' : ''} onClick={() => setPaymentMethod('CREDIT')}>Crédit</button></div></div>
           {paymentMethod === 'CASH' && !cashSession && <div className="inline-notice"><b>Caisse fermée.</b> Demandez au responsable de l’ouvrir.</div>}
           {paymentMethod === 'CASH' && cashSession && <div className="cash-status">Caisse ouverte</div>}
+          {paymentMethod === 'CASH' && !cashSession && <div className="seller-cash-control"><b>Votre caisse est fermee.</b><span>Ouvrez votre propre caisse avant une vente en especes.</span><div><input aria-label="Fond de caisse" type="number" min="0" step="0.01" value={cashAmount} onChange={event => setCashAmount(event.target.value)} placeholder="Fond initial (DA)"/><Button size="small" loading={cashBusy} onClick={openCash}>Ouvrir ma caisse</Button></div></div>}
+          {paymentMethod === 'CASH' && cashSession && <div className="seller-cash-control seller-cash-open"><b>Votre caisse est ouverte.</b><span>Entrez le comptage final uniquement a la fermeture.</span><div><input aria-label="Comptage de fermeture" type="number" min="0" step="0.01" value={cashAmount} onChange={event => setCashAmount(event.target.value)} placeholder="Comptage final (DA)"/><Button size="small" variant="secondary" loading={cashBusy} onClick={closeCash}>Cloturer ma caisse</Button></div></div>}
           {cart.length ? <div className="cart-items">{cart.map((line, index) => {
             const product = products.find(item => item.id === line.productId);
             if (!product) return null;
