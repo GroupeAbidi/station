@@ -11,7 +11,6 @@ export default function Sales({ products, sales, changed, toast, user }) {
   const [lookup, setLookup] = useState('');
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('POS');
-  const [workspaceTab, setWorkspaceTab] = useState('CART');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [cashSession, setCashSession] = useState(null);
   const [cashAmount, setCashAmount] = useState('');
@@ -92,8 +91,7 @@ export default function Sales({ products, sales, changed, toast, user }) {
   return <>
     <PageHeading eyebrow="POINT DE VENTE" title="Nouvelle vente" description="Scannez un article, ajustez les quantités, puis validez." actions={<div className="segmented"><button className={tab === 'POS' ? 'active' : ''} onClick={() => setTab('POS')}><ShoppingCart size={16}/> Vente</button><button className={tab === 'HISTORY' ? 'active' : ''} onClick={() => setTab('HISTORY')}><ReceiptText size={16}/> Historique</button></div>} />
     {tab === 'POS' ? <>
-      <div className={`vendor-pos ${workspaceTab === 'CART' ? 'cart-active' : 'scanner-active'}`}>
-      <div className="vendor-workspace-tabs" role="tablist" aria-label="Espace de vente"><button type="button" role="tab" aria-selected={workspaceTab === 'CART'} className={workspaceTab === 'CART' ? 'active' : ''} onClick={() => setWorkspaceTab('CART')}><ShoppingBag size={17}/> Panier <span>{cart.length}</span></button><button type="button" role="tab" aria-selected={workspaceTab === 'SCANNER'} className={workspaceTab === 'SCANNER' ? 'active' : ''} onClick={() => setWorkspaceTab('SCANNER')}><ScanLine size={17}/> Scanner</button></div>
+      <div className="vendor-pos cart-active">
       <section className="vendor-scanner-zone">
         <div className="scanner-zone-content"><div className="scanner-zone-heading"><h2>Scanner ou chercher</h2><p>Scannez le code-barres ou recherchez un article.</p></div>
           <form className="scan-box vendor-scan" onSubmit={submitScan}><span className="scan-graphic"><ScanLine size={27}/></span><input ref={scanRef} autoFocus={permitted} value={scan} onChange={changeScan} placeholder="Scanner un code-barres ou saisir une référence" disabled={!permitted}/><button disabled={!scan.trim() || !permitted} type="submit" aria-label="Ajouter le code saisi"><Plus size={19}/></button></form>
@@ -101,7 +99,7 @@ export default function Sales({ products, sales, changed, toast, user }) {
       </section>
       <aside className="cart-panel vendor-cart">
         <div className="cart-head"><div className="cart-icon"><ShoppingBag size={22}/></div><div><h3>Panier</h3><small>{cart.length} article{cart.length > 1 ? 's' : ''}</small></div></div>
-        <div className="cart-inner">
+        <div className="cart-inner"><div className="sale-scanner-toolbar"><div><b>Scanner ou saisir un article</b><small>Le panier reste visible pendant la saisie.</small></div><form className="scan-box vendor-scan" onSubmit={submitScan}><span className="scan-graphic"><ScanLine size={22}/></span><input ref={scanRef} autoFocus={permitted} value={scan} onChange={changeScan} placeholder="Code-barres ou reference" disabled={!permitted}/><button disabled={!scan.trim() || !permitted} type="submit" aria-label="Ajouter le code saisi"><Plus size={19}/></button></form></div>
           <div className="payment-row"><span>Paiement</span><div className="payment-options"><button className={paymentMethod === 'CASH' ? 'active' : ''} onClick={() => setPaymentMethod('CASH')}>Espèces</button><button className={paymentMethod === 'CARD' ? 'active' : ''} onClick={() => setPaymentMethod('CARD')}><CreditCard size={14}/> Carte</button><button className={paymentMethod === 'CREDIT' ? 'active' : ''} onClick={() => setPaymentMethod('CREDIT')}>Crédit</button></div></div>
           {paymentMethod === 'CASH' && !cashSession && <div className="inline-notice"><b>Caisse fermée.</b> Demandez au responsable de l’ouvrir.</div>}
           {paymentMethod === 'CASH' && cashSession && <div className="cash-status">Caisse ouverte</div>}
