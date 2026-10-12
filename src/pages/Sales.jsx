@@ -11,6 +11,7 @@ export default function Sales({ products, sales, changed, toast, user }) {
   const [lookup, setLookup] = useState('');
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('POS');
+  const [workspaceTab, setWorkspaceTab] = useState('CART');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
   const [cashSession, setCashSession] = useState(null);
   const [cashAmount, setCashAmount] = useState('');
@@ -91,7 +92,8 @@ export default function Sales({ products, sales, changed, toast, user }) {
   return <>
     <PageHeading eyebrow="POINT DE VENTE" title="Nouvelle vente" description="Scannez un article, ajustez les quantités, puis validez." actions={<div className="segmented"><button className={tab === 'POS' ? 'active' : ''} onClick={() => setTab('POS')}><ShoppingCart size={16}/> Vente</button><button className={tab === 'HISTORY' ? 'active' : ''} onClick={() => setTab('HISTORY')}><ReceiptText size={16}/> Historique</button></div>} />
     {tab === 'POS' ? <>
-      <div className="vendor-pos">
+      <div className={`vendor-pos ${workspaceTab === 'CART' ? 'cart-active' : 'scanner-active'}`}>
+      <div className="vendor-workspace-tabs" role="tablist" aria-label="Espace de vente"><button type="button" role="tab" aria-selected={workspaceTab === 'CART'} className={workspaceTab === 'CART' ? 'active' : ''} onClick={() => setWorkspaceTab('CART')}><ShoppingBag size={17}/> Panier <span>{cart.length}</span></button><button type="button" role="tab" aria-selected={workspaceTab === 'SCANNER'} className={workspaceTab === 'SCANNER' ? 'active' : ''} onClick={() => setWorkspaceTab('SCANNER')}><ScanLine size={17}/> Scanner</button></div>
       <section className="vendor-scanner-zone">
         <div className="scanner-zone-content"><div className="scanner-zone-heading"><h2>Scanner ou chercher</h2><p>Scannez le code-barres ou recherchez un article.</p></div>
           <form className="scan-box vendor-scan" onSubmit={submitScan}><span className="scan-graphic"><ScanLine size={27}/></span><input ref={scanRef} autoFocus={permitted} value={scan} onChange={changeScan} placeholder="Scanner un code-barres ou saisir une référence" disabled={!permitted}/><button disabled={!scan.trim() || !permitted} type="submit" aria-label="Ajouter le code saisi"><Plus size={19}/></button></form>
