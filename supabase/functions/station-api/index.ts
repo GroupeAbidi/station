@@ -189,13 +189,17 @@ Deno.serve(async request => {
       if (user.role === 'VENTES') { const { purchasePriceCents, ...product } = data; return json(product); }
       return json(data);
     }
+    let requestedInitialStockMilli = 0;
     const productInput = async (existingCode?: string) => {
       const body = await request.json();
       const name = requireString(body.name, 'Nom produit', 2, 150);
       const baseUnit = ['PCE', 'L', 'KG', 'M'].includes(body.baseUnit) ? body.baseUnit : fail(400, 'UnitÃ© de stock invalide.');
       const factor = toMilli(body.purchaseFactor, 'Coefficient d’achat');
       const minStock = body.minStock === undefined || body.minStock === '' ? 0 : toMilli(body.minStock, 'Seuil minimum');
+      requestedInitialStockMilli = body.currentStock === undefined || body.currentStock === '' ? 0 : toMilli(body.currentStock, 'Stock actuel');
+      if (requestedInitialStockMilli < 0) fail(400, 'Le stock actuel ne peut pas etre negatif.');
       if (baseUnit === 'PCE' && (factor % 1000 || minStock % 1000)) fail(400, 'Les piÃ¨ces doivent avoir une quantitÃ© entiÃ¨re.');
+      if (baseUnit === 'PCE' && requestedInitialStockMilli % 1000) fail(400, 'Les pieces doivent avoir une quantite entiere.');
       const internalCode = clean(body.internalCode || existingCode || productCode()).toUpperCase().replace(/\s+/g, '-');
       const barcode = clean(body.barcode) || null;
       if (!/^[A-Z0-9._-]{3,55}$/.test(internalCode)) fail(400, 'RÃ©fÃ©rence interne invalide.');
@@ -204,8 +208,15 @@ Deno.serve(async request => {
     };
     if (request.method === 'POST' && path === '/products') {
       permit(user, 'products.manage'); const input = await productInput();
-      const { data, error } = await db.from('Product').insert({ id: crypto.randomUUID(), ...input, stockMilli: 0, active: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }).select('*').single();
-      if (error) databaseError(error); await audit(user.id, 'PRODUCT_CREATE', 'Product', data.id, data.internalCode); return json(data, 201);
+      const now = new Date().toISOString();
+      const { data, error } = await db.from('Product').insert({ id: crypto.randomUUID(), ...input, stockMilli: requestedInitialStockMilli, active: true, createdAt: now, updatedAt: now }).select('*').single();
+      if (error) databaseError(error);
+      if (requestedInitialStockMilli > 0) {
+        const sourceRef = `OPEN-${data.internalCode}`;
+        const { error: movementError } = await db.from('StockMovement').insert({ id: crypto.randomUUID(), productId: data.id, deltaMilli: requestedInitialStockMilli, balanceAfterMilli: requestedInitialStockMilli, type: 'ADJUSTMENT', sourceRef, note: 'Stock initial lors de la creation de l article.', userId: user.id });
+        if (movementError) databaseError(movementError);
+      }
+      await audit(user.id, 'PRODUCT_CREATE', 'Product', data.id, data.internalCode); return json(data, 201);
     }
     const productMatch = path.match(/^\/products\/([^/]+)$/);
     if (request.method === 'PUT' && productMatch) {

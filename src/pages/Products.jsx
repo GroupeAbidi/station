@@ -6,7 +6,7 @@ import Papa from 'papaparse';
 import { api, post, put, patch } from '../api';
 import { quantity, num, da, purchaseEquivalent, stockStatus, downloadCSV, can } from '../utils';
 import { Badge, Button, Empty, FormField, Modal, PageHeading, Panel, SearchBox } from '../components/UI';
-const init = { name:'', internalCode:'', barcode:'', category:'Divers', baseUnit:'PCE', purchaseUnit:'PCE', purchaseFactor:1, minStock:0, purchasePrice:0, salePrice:0 };
+const init = { name:'', internalCode:'', barcode:'', category:'Divers', baseUnit:'PCE', purchaseUnit:'PCE', purchaseFactor:1, minStock:0, currentStock:0, purchasePrice:0, salePrice:0 };
 function ProductForm({ current, onClose, changed, toast }) {
   const [form,setForm] = useState(current ? { ...current, purchaseFactor: quantity(current.purchaseFactorMilli), minStock: quantity(current.minStockMilli), purchasePrice: current.purchasePriceCents / 100, salePrice: current.salePriceCents / 100 } : {...init});
   const [advanced,setAdvanced] = useState(!!current);
@@ -35,6 +35,7 @@ function ProductForm({ current, onClose, changed, toast }) {
       </div>
       <div className="conversion-example"><strong>Règle de conversion :</strong> 1 {form.purchaseUnit||'conditionnement'} = {num(Number(form.purchaseFactor)||0,3)} {form.baseUnit}. Réceptionnez en {form.purchaseUnit||'conditionnement'}, vendez en {form.baseUnit}.</div>
       <button type="button" className="advanced-toggle" aria-expanded={advanced} onClick={()=>setAdvanced(!advanced)}><Tag size={18}/>{advanced?'Masquer les options supplémentaires':'Afficher plus d’options (référence, seuil, prix d’achat)'}<span>{advanced?'−':'+'}</span></button>
+      {!current&&<FormField label={`Stock actuel (${form.baseUnit})`} hint="Quantite deja presente au magasin lors de la creation de cet article."><input type="number" min="0" step={form.baseUnit==='PCE'?'1':'0.001'} value={form.currentStock} onChange={e=>set('currentStock',e.target.value)}/></FormField>}
       {advanced&&<div className="advanced-fields form-grid">
         <FormField label="ID / référence interne" hint="Unique. Vide = généré automatiquement."><input value={form.internalCode||''} onChange={e=>set('internalCode',e.target.value)} placeholder="ART-0001"/></FormField>
         <FormField label="Catégorie"><input value={form.category} onChange={e=>set('category',e.target.value)}/></FormField>
