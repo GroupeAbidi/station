@@ -1,4 +1,5 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import './product-picker.css';
 import { X, Search, CircleAlert, CheckCircle2, Info, AlertTriangle, LoaderCircle, PackageOpen } from 'lucide-react';
 import { statusLabel } from '../utils';
 
@@ -42,6 +43,28 @@ export function Toast({ toast, onClose }) {
   return <div className={`toast toast-${toast.type || 'success'}`} role="status"><Icon size={20}/><span>{toast.message}</span><button onClick={onClose} aria-label="Fermer"><X size={16}/></button></div>;
 }
 export function Spinner() { return <div className="loading-screen"><LoaderCircle className="spin" size={30}/><span>Chargement des données…</span></div>; }
+export function SearchableProductSelect({ value, onChange, products, exclude = [], label = 'Choisir un article' }) {
+  const selected = products.find(product => product.id === value);
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const available = useMemo(() => products.filter(product => product.active && (product.id === value || !exclude.includes(product.id))), [products, value, exclude]);
+  const matches = useMemo(() => {
+    const term = query.trim().toLocaleLowerCase();
+    if (!term) return available.slice(0, 30);
+    return available.filter(product => `${product.name} ${product.internalCode} ${product.barcode || ''}`.toLocaleLowerCase().includes(term)).slice(0, 50);
+  }, [available, query]);
+  const choose = product => { onChange(product.id); setQuery(''); setOpen(false); };
+  const clear = () => { onChange(''); setQuery(''); setOpen(true); };
+  const displayValue = open ? query : selected ? `${selected.name} - ${selected.internalCode}` : '';
+
+  return <div className="product-picker">
+    <Search size={16}/>
+    <input value={displayValue} placeholder={label} onFocus={() => { setQuery(''); setOpen(true); }} onBlur={() => setOpen(false)} onChange={event => { setQuery(event.target.value); setOpen(true); }} onKeyDown={event => { if (event.key === 'Escape') setOpen(false); if (event.key === 'Enter' && matches.length === 1) { event.preventDefault(); choose(matches[0]); } }} aria-label="Rechercher un article" autoComplete="off"/>
+    {selected && <button type="button" className="product-picker-clear" onMouseDown={event => event.preventDefault()} onClick={clear} aria-label="Effacer l'article"><X size={14}/></button>}
+    {open && <div className="product-picker-menu">{matches.length ? matches.map(product => <button type="button" key={product.id} className={product.id === value ? 'selected' : ''} onMouseDown={event => { event.preventDefault(); choose(product); }}><span className="product-picker-name">{product.name}</span><span>{product.internalCode}{product.barcode ? ` - ${product.barcode}` : ''}</span></button>) : <div className="product-picker-empty">Aucun article ne correspond.</div>}</div>}
+  </div>;
+}
+
 export function ProductSelect({ value, onChange, products, exclude = [], label = 'Choisir un article' }) {
   return <select value={value} onChange={e => onChange(e.target.value)}><option value="">{label}</option>{products.filter(p => p.active && (p.id === value || !exclude.includes(p.id))).map(p => <option key={p.id} value={p.id}>{p.name} · {p.internalCode}</option>)}</select>;
 }

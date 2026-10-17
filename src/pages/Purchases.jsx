@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Check, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, FilePlus2, Plus, Send, ShieldCheck, Trash2, Truck, X } from 'lucide-react';
 import { post } from '../api';
-import { Badge, Button, Empty, FormField, Modal, PageHeading, Panel, ProductSelect } from '../components/UI';
+import { Badge, Button, Empty, FormField, Modal, PageHeading, Panel, SearchableProductSelect as ProductSelect } from '../components/UI';
 import { can, dateTime, da, num, quantity, statusLabel } from '../utils';
 
 function RequestForm({ products, suppliers, onClose, changed, toast }) {
