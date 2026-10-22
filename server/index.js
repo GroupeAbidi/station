@@ -70,7 +70,7 @@ const productData = input => {
 };
 
 app.get('/api/health', safe(async (_req, res) => {
-  await prisma.user.count(); good(res, { ok: true, database: 'SQLite', app: 'Station Magazine' });
+  await prisma.user.count(); good(res, { ok: true, database: 'PostgreSQL', app: 'Station Magazine' });
 }));
 app.get('/api/auth/users', limitAccountList, safe(async (_req, res) => {
   const users = await prisma.user.findMany({ where: { active: true, username: { not: null } }, select: { name: true, username: true }, orderBy: { name: 'asc' } });
