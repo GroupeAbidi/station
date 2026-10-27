@@ -54,6 +54,17 @@ const labels = Object.fromEntries(Object.values(nav).flat().map(([key,label]) =>
 const navGroups = { dashboard:'TABLEAU DE BORD', purchases:'APPROVISIONNEMENT', receptions:'APPROVISIONNEMENT', suppliers:'APPROVISIONNEMENT', stock:'STOCK ET ARTICLES', products:'STOCK ET ARTICLES', import:'STOCK ET ARTICLES', movements:'STOCK ET ARTICLES', reports:'FINANCES', cash:'FINANCES', sales:'VENTES', home:'ACCUEIL', users:'ADMINISTRATION', audit:'ADMINISTRATION' };
 const firstPage = role => role === 'VENTES' ? 'sales' : role === 'MANAGER' ? 'dashboard' : 'home';
 const initial = { products: [], purchases: [], receptions: [], sales: [], movements: [], suppliers: [], profit: [], cash: [], users: [], audits: [], dashboard: null };
+const resourcesForPage = (role, page) => {
+  const shared = {
+    products: ['products'], stock: ['products'], purchases: ['purchases', 'products', 'suppliers'],
+    receptions: ['receptions', 'purchases'], suppliers: ['suppliers'], movements: ['movements'],
+    reports: ['sales', 'profit'], cash: ['cash'], users: ['users'], audit: ['audit'], import: [],
+  };
+  if (page === 'dashboard') return ['dashboard'];
+  if (page === 'home') return role === 'MAGASIN' ? ['purchases', 'products'] : ['sales'];
+  if (page === 'sales') return ['sales'];
+  return shared[page] || [];
+};
 
 function Brand({ vertical = false }) {
   return <div className={`station-brand ${vertical?'brand-vertical':''}`}>
@@ -139,14 +150,11 @@ export default function App() {
   const [settingsOpen,setSettingsOpen] = useState(false);
   const [preselect,setPreselect] = useState(null);
   const toast = useCallback((text,type='success') => setMessage({message:text,type,id:Date.now()}),[]);
-  const load = useCallback(async (person,begin=false,quiet=false) => {
+  const load = useCallback(async (person,pageToLoad,begin=false,quiet=false) => {
     if (!person) return;
     if (begin) setLoading(true); else setRefreshing(true);
     try {
-      const paths = person.role === 'MANAGER'
-        ? ['products','purchases','receptions','sales','movements','dashboard','users','suppliers','profit','cash','audit']
-        : person.role === 'MAGASIN' ? ['products','purchases','receptions','movements','suppliers']
-        : ['products','sales'];
+      const paths = resourcesForPage(person.role, pageToLoad);
       const results = await Promise.allSettled(paths.map(k => api(k === 'profit' ? '/reports/profit' : k === 'cash' ? '/cash/sessions' : '/'+k)));
       const fresh = {};
       const failures = [];
@@ -162,7 +170,7 @@ export default function App() {
   },[toast]);
   useEffect(()=>{
     let alive = true;
-    if (getToken()) api('/auth/me').then(({user:u})=>{if (alive){setUser(u);setPage(firstPage(u.role));load(u,true)}})
+    if (getToken()) api('/auth/me').then(({user:u})=>{if (alive){const first = firstPage(u.role);setUser(u);setPage(first);load(u,first,true)}})
       .catch(()=>{setToken(null);if(alive)setLoading(false)});
     return ()=>{alive=false};
   },[load]);
@@ -171,14 +179,14 @@ export default function App() {
     window.addEventListener('magasin:unauthorized',fn);
     return ()=>window.removeEventListener('magasin:unauthorized',fn);
   },[]);
-  const onLogin = person => {setUser(person);setPage(firstPage(person.role));load(person,true)};
+  const onLogin = person => {const first = firstPage(person.role);setUser(person);setPage(first);load(person,first,true)};
   const go = (dest,params={}) => {
     if (!user || !(nav[user.role]||[]).some(([key])=>key===dest)) return;
     if(params.requestId) setPreselect(params.requestId);
-    setPage(dest);setMobile(false);window.scrollTo({top:0,behavior:'smooth'});
+    setPage(dest);setMobile(false);window.scrollTo({top:0,behavior:'smooth'});load(user,dest,false,true);
   };
   const logout=()=>{setToken(null);setUser(null);setData(initial);setMobile(false)};
-  const changed=()=>load(user,false,true);
+  const changed=()=>load(user,page,false,true);
   if(!user) return <><Login onLogin={onLogin} toast={toast}/><Toast toast={message} onClose={()=>setMessage(null)}/></>;
   const common={user,changed,toast};
   const content = () => {

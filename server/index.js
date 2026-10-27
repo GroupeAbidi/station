@@ -146,6 +146,20 @@ app.get('/api/products/lookup', auth, safe(async (req, res) => {
   if (req.user.role === 'VENTES') { const { purchasePriceCents, ...item } = product; return good(res, item); }
   good(res, product);
 }));
+app.get('/api/products/search', auth, safe(async (req, res) => {
+  const term = String(req.query.q || '').trim();
+  if (term.length < 2) return good(res, []);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 8, 1), 20);
+  const products = await prisma.product.findMany({
+    where: { active: true, OR: [
+      { name: { contains: term, mode: 'insensitive' } },
+      { internalCode: { contains: term, mode: 'insensitive' } },
+      { barcode: { contains: term, mode: 'insensitive' } },
+    ] },
+    orderBy: { name: 'asc' }, take: limit,
+  });
+  good(res, req.user.role === 'VENTES' ? products.map(({ purchasePriceCents, ...item }) => item) : products);
+}));
 app.post('/api/products', auth, permit('products.manage'), safe(async (req, res) => {
   const data = productData(req.body);
   const p = await prisma.product.create({ data });
@@ -425,7 +439,7 @@ app.get('/api/dashboard', auth, permit('dashboard.view'), safe(async (_req, res)
     const sum = sales.filter(x => x.createdAt.toISOString().slice(0, 10) === d).reduce((n, x) => n + x.totalCents, 0);
     return { day: d, total: sum / 100 };
   });
-  good(res, { productCount: products.length, lowStock: products.filter(p => p.stockMilli <= p.minStockMilli),
+  good(res, { productCount: products.length, lowStock: products.filter(p => p.minStockMilli > 0 && p.stockMilli <= p.minStockMilli),
     pendingCount: purchases.find(p => p.status === 'PENDING')?._count?.id || 0,
     activePurchaseCount: purchases.filter(p => ['APPROVED', 'PARTIAL'].includes(p.status)).reduce((n, p) => n + p._count.id, 0),
     sales14DaysCents: sales.reduce((n, s) => n + s.totalCents, 0), saleCount14Days: sales.length,

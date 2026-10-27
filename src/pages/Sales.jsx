@@ -9,6 +9,7 @@ export default function Sales({ products, sales, changed, toast, user }) {
   const [client, setClient] = useState('');
   const [cart, setCart] = useState([]);
   const [lookup, setLookup] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
   const [saving, setSaving] = useState(false);
   const [tab, setTab] = useState('POS');
   const [paymentMethod, setPaymentMethod] = useState('CASH');
@@ -31,13 +32,13 @@ export default function Sales({ products, sales, changed, toast, user }) {
     if (!product.active) return;
     const existing = cart.find(line => line.productId === product.id && line.sellUnit === unit);
     if (existing) setCart(lines => lines.map(line => line === existing ? { ...line, quantity: Number(line.quantity) + 1 } : line));
-    else setCart(lines => [...lines, { productId: product.id, sellUnit: unit, quantity: 1, price: unit === 'BASE' ? product.salePriceCents / 100 : product.salePriceCents * product.purchaseFactorMilli / 100000 }]);
+    else setCart(lines => [...lines, { productId: product.id, product, sellUnit: unit, quantity: 1, price: unit === 'BASE' ? product.salePriceCents / 100 : product.salePriceCents * product.purchaseFactorMilli / 100000 }]);
   };
   const updateLine = (index, changes) => setCart(lines => lines.map((line, lineIndex) => lineIndex === index ? { ...line, ...changes } : line));
   const changeUnit = (index, sellUnit) => {
     const line = cart[index];
     if (cart.some((item, itemIndex) => itemIndex !== index && item.productId === line.productId && item.sellUnit === sellUnit)) return toast('Cette unité est déjà dans le panier.', 'error');
-    const product = products.find(item => item.id === line.productId);
+    const product = line.product || products.find(item => item.id === line.productId);
     updateLine(index, { sellUnit, price: sellUnit === 'BASE' ? product.salePriceCents / 100 : product.salePriceCents * product.purchaseFactorMilli / 100000 });
   };
   const lookupScan = async value => {
@@ -56,12 +57,18 @@ export default function Sales({ products, sales, changed, toast, user }) {
     if (value.trim()) scanTimer.current = setTimeout(() => lookupScan(value), 500);
   };
   const availableFor = line => {
-    const product = products.find(item => item.id === line.productId);
+    const product = line.product || products.find(item => item.id === line.productId);
     return product ? (line.sellUnit === 'BASE' ? quantity(product.stockMilli) : product.stockMilli / product.purchaseFactorMilli) : 0;
   };
   const cartError = cart.some(line => !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0 || Number(line.quantity) > availableFor(line));
   const totalCents = Math.round(cart.reduce((total, line) => total + (Number(line.price) || 0) * 100 * (Number(line.quantity) || 0), 0));
-  const matches = useMemo(() => products.filter(product => product.stockMilli > 0 && (product.name + ' ' + product.internalCode + ' ' + (product.barcode || '')).toLowerCase().includes(lookup.toLowerCase())).slice(0, 8), [products, lookup]);
+  useEffect(() => {
+    const term = lookup.trim();
+    if (term.length < 2) { setSearchResults([]); return; }
+    const timer = setTimeout(() => api('/products/search?q=' + encodeURIComponent(term)).then(setSearchResults).catch(() => setSearchResults([])), 180);
+    return () => clearTimeout(timer);
+  }, [lookup]);
+  const matches = useMemo(() => searchResults.filter(product => product.stockMilli > 0), [searchResults]);
   const submit = async () => {
     if (!cart.length || (paymentMethod === 'CASH' && !cashSession)) return;
     setSaving(true);
@@ -101,7 +108,7 @@ export default function Sales({ products, sales, changed, toast, user }) {
           {paymentMethod === 'CASH' && !cashSession && <div className="seller-cash-control"><b>Votre caisse est fermee.</b><span>Ouvrez votre propre caisse avant une vente en especes.</span><div><input aria-label="Fond de caisse" type="number" min="0" step="0.01" value={cashAmount} onChange={event => setCashAmount(event.target.value)} placeholder="Fond initial (DA)"/><Button size="small" loading={cashBusy} onClick={openCash}>Ouvrir ma caisse</Button></div></div>}
           {paymentMethod === 'CASH' && cashSession && <div className="seller-cash-control seller-cash-open"><b>Votre caisse est ouverte.</b><span>Entrez le comptage final uniquement a la fermeture.</span><div><input aria-label="Comptage de fermeture" type="number" min="0" step="0.01" value={cashAmount} onChange={event => setCashAmount(event.target.value)} placeholder="Comptage final (DA)"/><Button size="small" variant="secondary" loading={cashBusy} onClick={closeCash}>Cloturer ma caisse</Button></div></div>}
           {cart.length ? <div className="cart-items">{cart.map((line, index) => {
-            const product = products.find(item => item.id === line.productId);
+            const product = line.product || products.find(item => item.id === line.productId);
             if (!product) return null;
             const available = availableFor(line);
             const step = product.baseUnit === 'PCE' && line.sellUnit === 'BASE' ? 1 : 0.001;
