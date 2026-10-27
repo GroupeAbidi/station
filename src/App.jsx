@@ -53,7 +53,7 @@ const nav = {
 const labels = Object.fromEntries(Object.values(nav).flat().map(([key,label]) => [key,label]));
 const navGroups = { dashboard:'TABLEAU DE BORD', purchases:'APPROVISIONNEMENT', receptions:'APPROVISIONNEMENT', suppliers:'APPROVISIONNEMENT', stock:'STOCK ET ARTICLES', products:'STOCK ET ARTICLES', import:'STOCK ET ARTICLES', movements:'STOCK ET ARTICLES', reports:'FINANCES', cash:'FINANCES', sales:'VENTES', home:'ACCUEIL', users:'ADMINISTRATION', audit:'ADMINISTRATION' };
 const firstPage = role => role === 'VENTES' ? 'sales' : role === 'MANAGER' ? 'dashboard' : 'home';
-const initial = { products: [], purchases: [], receptions: [], sales: [], movements: [], suppliers: [], profit: [], cash: [], users: [], audits: [], dashboard: null };
+const initial = { products: [], purchases: [], receptions: [], sales: [], movements: [], suppliers: [], profit: [], cash: [], users: [], audits: [], dashboard: null, purchaseSummary: null, stockSummary: null };
 const resourcesForPage = (role, page) => {
   const shared = {
     products: ['products'], stock: ['products'], purchases: ['purchases', 'products', 'suppliers'],
@@ -61,7 +61,7 @@ const resourcesForPage = (role, page) => {
     reports: ['sales', 'profit'], cash: ['cash'], users: ['users'], audit: ['audit'], import: [],
   };
   if (page === 'dashboard') return ['dashboard'];
-  if (page === 'home') return role === 'MAGASIN' ? ['purchases', 'products'] : ['sales'];
+  if (page === 'home') return role === 'MAGASIN' ? ['purchaseSummary', 'stockSummary'] : ['sales'];
   if (page === 'sales') return ['sales'];
   return shared[page] || [];
 };
@@ -155,7 +155,8 @@ export default function App() {
     if (begin) setLoading(true); else setRefreshing(true);
     try {
       const paths = resourcesForPage(person.role, pageToLoad);
-      const results = await Promise.allSettled(paths.map(k => api(k === 'profit' ? '/reports/profit' : k === 'cash' ? '/cash/sessions' : '/'+k)));
+      const endpoint = key => key === 'profit' ? '/reports/profit' : key === 'cash' ? '/cash/sessions' : key === 'purchaseSummary' ? '/purchases/summary' : key === 'stockSummary' ? '/stock/summary' : '/'+key;
+      const results = await Promise.allSettled(paths.map(key => api(endpoint(key))));
       const fresh = {};
       const failures = [];
       results.forEach((result,index) => {

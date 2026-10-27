@@ -212,6 +212,11 @@ const purchaseLineSchema = z.object({ productId: z.string().min(1), quantity: qt
 app.get('/api/purchases', auth, permit('purchases.view'), safe(async (_req, res) => {
   good(res, await prisma.purchaseRequest.findMany({ include: { supplierRef: true, createdBy: { select: { name: true } }, approvedBy: { select: { name: true } }, lines: { include: { product: true } }, receptions: { select: { id: true, ref: true, createdAt: true } } }, orderBy: { createdAt: 'desc' }, take: 300 }));
 }));
+app.get('/api/purchases/summary', auth, permit('purchases.view'), safe(async (_req, res) => {
+  const grouped = await prisma.purchaseRequest.groupBy({ by: ['status'], _count: { id: true } });
+  const count = status => grouped.find(item => item.status === status)?._count.id || 0;
+  good(res, { pending: count('PENDING'), approved: count('APPROVED'), partial: count('PARTIAL') });
+}));
 app.post('/api/purchases', auth, permit('purchases.create'), safe(async (req, res) => {
   const d = z.object({ supplier: str.max(120).default(''), supplierId: z.string().min(1).nullable().optional(), notes: str.max(500).default(''), lines: z.array(purchaseLineSchema).min(1).max(100) }).parse(req.body);
   const savedSupplier = d.supplierId ? await prisma.supplier.findFirst({ where: { id: d.supplierId, active: true } }) : null;
@@ -424,6 +429,14 @@ app.post('/api/stock/adjust', auth, permit('stock.adjust'), safe(async (req, res
     return mv;
   });
   good(res, movement, 201);
+}));
+app.get('/api/stock/summary', auth, permit('products.manage'), safe(async (_req, res) => {
+  const products = await prisma.product.findMany({ where: { active: true }, select: { stockMilli: true, minStockMilli: true } });
+  good(res, {
+    inStock: products.filter(product => product.stockMilli > 0).length,
+    outOfStock: products.filter(product => product.stockMilli === 0).length,
+    lowCount: products.filter(product => product.minStockMilli > 0 && product.stockMilli <= product.minStockMilli).length,
+  });
 }));
 
 app.get('/api/dashboard', auth, permit('dashboard.view'), safe(async (_req, res) => {

@@ -8,9 +8,9 @@ const Item = ({Icon, title, subtitle, onClick, index}) => <button type="button" 
 </button>;
 export default function Home({user,data,go}) {
   const magasin = user.role === 'MAGASIN';
-  const pending = data.purchases.filter(p=>p.status==='PENDING').length;
-  const ready = data.purchases.filter(p=>['APPROVED','PARTIAL'].includes(p.status)).length;
-  const alerts = data.products.filter(p=>p.stockMilli<=p.minStockMilli).length;
+  const pending = data.purchaseSummary?.pending || 0;
+  const ready = (data.purchaseSummary?.approved || 0) + (data.purchaseSummary?.partial || 0);
+  const alerts = data.stockSummary?.lowCount || 0;
   const mySales = data.sales||[];
   return <div className="workspace-home">
     <PageHeading eyebrow="MON ESPACE DE TRAVAIL" title={`Bonjour, ${user.name.split(' ')[0]} 👋`}
