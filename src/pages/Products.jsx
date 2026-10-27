@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Barcode, Box, Download, FileDown, FileUp, Layers3, MoreHorizontal, PackagePlus, Pencil, Plus, Printer, RefreshCcw, Search, Tag, Trash2, X } from 'lucide-react';
 import JsBarcode from 'jsbarcode';
 import readXlsxFile from 'read-excel-file';
@@ -51,7 +51,7 @@ function BarcodeModal({ product, onClose }) {
   useEffect(() => { if (product.barcode && svgRef.current) { try { JsBarcode(svgRef.current, product.barcode, { format: 'CODE128', width: 1.7, height: 75, displayValue:true, fontSize:14, margin: 6, lineColor:'#101c28' }); } catch(e) { console.error(e); } } }, [product]);
   return <Modal title="Étiquette code-barres" subtitle="Format CODE128 — compatible avec les lecteurs USB en mode clavier." onClose={onClose} width="460px"><div className="barcode-label" id="print-label"><span className="barcode-brand">STATION MAGAZINE</span><strong>{product.name}</strong><svg ref={svgRef} aria-label={`Code-barres ${product.barcode}`}/><small>Réf. {product.internalCode}</small></div><div className="modal-actions"><Button variant="secondary" onClick={onClose}>Fermer</Button><Button icon={Printer} onClick={()=>window.print()}>Imprimer l’étiquette</Button></div></Modal>;
 }
-export function Products({ products, changed, toast, user }) {
+function ProductsLegacy({ products, changed, toast, user }) {
   const [query,setQuery]=useState(''); const [cat,setCat]=useState('Tout'); const [form,setForm]=useState(null); const [label,setLabel]=useState(null); const [busy,setBusy]=useState('');
   const permitted = can(user,['MANAGER','MAGASIN']);
   const categories = ['Tout',...new Set(products.map(p=>p.category))];
@@ -65,6 +65,103 @@ export function Products({ products, changed, toast, user }) {
       <div className="table-scroll"><table className="product-table"><thead><tr><th>Article</th><th>Référence</th><th>Code-barres</th><th>Unité / Achat</th><th>Stock actuel</th><th>Statut</th><th className="right">Actions</th></tr></thead><tbody>{rows.map(p=><tr key={p.id}><td><div className="table-product"><span className="product-initial">{p.name[0]?.toUpperCase()}</span><div><b>{p.name}</b><small>{p.category}</small></div></div></td><td className="mono" data-label="Référence">{p.internalCode}</td><td data-label="Code-barres">{p.barcode?<span className="barcode-chip"><Barcode size={14}/>{p.barcode}</span>:<span className="faded">Non attribué</span>}</td><td data-label="Unité / Achat"><b>{p.baseUnit}</b><small className="cell-sub">1 {p.purchaseUnit} = {num(quantity(p.purchaseFactorMilli),3)} {p.baseUnit}</small></td><td data-label="Stock actuel"><b>{num(quantity(p.stockMilli),3)} {p.baseUnit}</b>{purchaseEquivalent(p)&&<small className="cell-sub">{purchaseEquivalent(p)}</small>}</td><td data-label="Statut"><Badge status={stockStatus(p)}>{p.stockMilli===0?'Rupture':p.stockMilli<=p.minStockMilli?'Seuil bas':'Disponible'}</Badge></td><td className="right" data-label="Actions"><div className="cell-actions">{permitted&&<button className="icon-btn" title="Modifier" onClick={()=>setForm({type:'edit',product:p})}><Pencil size={16}/></button>}{p.barcode?<button className="icon-btn" title="Imprimer code-barres" onClick={()=>setLabel(p)}><Printer size={16}/></button>:permitted&&<button className="btn-text tiny" disabled={busy===p.id} onClick={()=>generate(p)}><Barcode size={14}/> Générer</button>}{permitted&&<button className="icon-btn danger" title="Supprimer l’article" aria-label={`Supprimer ${p.name}`} disabled={busy===p.id} onClick={()=>remove(p)}><Trash2 size={16}/></button>}</div></td></tr>)}</tbody></table></div>
       {!rows.length&&<Empty title="Aucun article trouvé" desc="Modifiez vos filtres ou créez un article."/>}</Panel>
     {form&&<ProductForm current={form.product} toast={toast} changed={changed} onClose={()=>setForm(null)}/>}{label&&<BarcodeModal product={label} onClose={()=>setLabel(null)}/>}
+  </>;
+}
+
+export function Products({ changed, toast, user }) {
+  const [query, setQuery] = useState('');
+  const [search, setSearch] = useState('');
+  const [category, setCategory] = useState('');
+  const [page, setPage] = useState(1);
+  const [catalog, setCatalog] = useState({ items: [], total: 0, page: 1, limit: 50, barcodeCount: 0, categories: [] });
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(null);
+  const [label, setLabel] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const permitted = can(user, ['MANAGER', 'MAGASIN']);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSearch(query.trim()), 180);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  const loadCatalog = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ page: String(page), limit: '50' });
+      if (search) params.set('q', search);
+      if (category) params.set('category', category);
+      setCatalog(await api(`/products/catalog?${params}`));
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [category, page, search, toast]);
+
+  useEffect(() => { loadCatalog(); }, [loadCatalog]);
+
+  const refreshCatalog = async () => {
+    await loadCatalog();
+    changed();
+  };
+  const updateQuery = value => { setQuery(value); setPage(1); };
+  const updateCategory = value => { setCategory(value); setPage(1); };
+  const generate = async product => {
+    setBusy(product.id);
+    try {
+      const result = await post(`/products/${product.id}/generate-barcode`, {});
+      toast(`Code-barres attribue : ${result.barcode}`);
+      await refreshCatalog();
+      setLabel(result);
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      setBusy('');
+    }
+  };
+  const remove = async product => {
+    if (!window.confirm(`Supprimer ${product.name} du catalogue actif ?`)) return;
+    setBusy(product.id);
+    try {
+      await patch(`/products/${product.id}/status`, { active: false });
+      toast('Article supprime du catalogue.');
+      await refreshCatalog();
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      setBusy('');
+    }
+  };
+  const exportRows = async () => {
+    setExporting(true);
+    try {
+      const products = await api('/products');
+      downloadCSV([
+        ['Code interne', 'Nom', 'Code-barres', 'Categorie', 'Unite stock', 'Unite achat', 'Facteur', 'Stock', 'Seuil', 'Prix achat DA', 'Prix vente DA'],
+        ...products.map(product => [product.internalCode, product.name, product.barcode, product.category, product.baseUnit, product.purchaseUnit, quantity(product.purchaseFactorMilli), quantity(product.stockMilli), quantity(product.minStockMilli), product.purchasePriceCents / 100, product.salePriceCents / 100]),
+      ], 'catalogue-articles.csv');
+    } catch (error) {
+      toast(error.message, 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+  const categories = catalog.categories || [];
+  const lastPage = Math.max(1, Math.ceil(catalog.total / catalog.limit));
+
+  return <>
+    <PageHeading eyebrow="REFERENTIEL" title="Catalogue articles" description="Une base article fiable, sans doublons, avec les unites et codes-barres centralises." actions={<><Button variant="secondary" icon={FileDown} loading={exporting} onClick={exportRows}>Exporter CSV</Button>{permitted && <Button icon={PackagePlus} onClick={() => setForm({ type: 'new' })}>Nouvel article</Button>}</>}/>
+    <div className="mini-metrics"><div><Box size={18}/><span><b>{catalog.total}</b> articles trouves</span></div><div><Barcode size={18}/><span><b>{catalog.barcodeCount}</b> avec code-barres</span></div><div><Layers3 size={18}/><span><b>{categories.length}</b> categories</span></div></div>
+    <Panel title="Repertoire produits" subtitle="Recherchez par designation, reference ou code-barres." action={<span className="table-count">{catalog.total} resultat(s)</span>}>
+      <div className="table-toolbar"><SearchBox value={query} onChange={updateQuery} placeholder="Chercher nom, ID, code-barres..."/><select className="filter-select" value={category} onChange={event => updateCategory(event.target.value)}><option value="">Toutes les categories</option>{categories.map(item => <option key={item} value={item}>{item}</option>)}</select></div>
+      <div className="table-scroll"><table className="product-table"><thead><tr><th>Article</th><th>Reference</th><th>Code-barres</th><th>Unite / Achat</th><th>Stock actuel</th><th>Statut</th><th className="right">Actions</th></tr></thead><tbody>{catalog.items.map(product => <tr key={product.id}><td><div className="table-product"><span className="product-initial">{product.name[0]?.toUpperCase()}</span><div><b>{product.name}</b><small>{product.category}</small></div></div></td><td className="mono" data-label="Reference">{product.internalCode}</td><td data-label="Code-barres">{product.barcode ? <span className="barcode-chip"><Barcode size={14}/>{product.barcode}</span> : <span className="faded">Non attribue</span>}</td><td data-label="Unite / Achat"><b>{product.baseUnit}</b><small className="cell-sub">1 {product.purchaseUnit} = {num(quantity(product.purchaseFactorMilli), 3)} {product.baseUnit}</small></td><td data-label="Stock actuel"><b>{num(quantity(product.stockMilli), 3)} {product.baseUnit}</b>{purchaseEquivalent(product) && <small className="cell-sub">{purchaseEquivalent(product)}</small>}</td><td data-label="Statut"><Badge status={stockStatus(product)}>{product.stockMilli === 0 ? 'Rupture' : product.stockMilli <= product.minStockMilli ? 'Seuil bas' : 'Disponible'}</Badge></td><td className="right" data-label="Actions"><div className="cell-actions">{permitted && <button className="icon-btn" title="Modifier" onClick={() => setForm({ type: 'edit', product })}><Pencil size={16}/></button>}{product.barcode ? <button className="icon-btn" title="Imprimer code-barres" onClick={() => setLabel(product)}><Printer size={16}/></button> : permitted && <button className="btn-text tiny" disabled={busy === product.id} onClick={() => generate(product)}><Barcode size={14}/> Generer</button>}{permitted && <button className="icon-btn danger" title="Supprimer" aria-label={`Supprimer ${product.name}`} disabled={busy === product.id} onClick={() => remove(product)}><Trash2 size={16}/></button>}</div></td></tr>)}</tbody></table></div>
+      {loading && <div className="catalog-loading">Recherche des articles...</div>}
+      {!loading && !catalog.items.length && <Empty title="Aucun article trouve" desc="Modifiez vos filtres ou creez un article."/>}
+      {!loading && catalog.total > catalog.limit && <div className="catalog-pagination"><span>Page {catalog.page} sur {lastPage}</span><div><Button size="small" variant="secondary" disabled={catalog.page <= 1} onClick={() => setPage(current => current - 1)}>Precedent</Button><Button size="small" variant="secondary" disabled={catalog.page >= lastPage} onClick={() => setPage(current => current + 1)}>Suivant</Button></div></div>}
+    </Panel>
+    {form && <ProductForm current={form.product} toast={toast} changed={refreshCatalog} onClose={() => setForm(null)}/>}{label && <BarcodeModal product={label} onClose={() => setLabel(null)}/>}
   </>;
 }
 

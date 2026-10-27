@@ -138,6 +138,28 @@ app.get('/api/products', auth, safe(async (req, res) => {
   const products = await prisma.product.findMany({ where: (req.query.all === '1' && req.user.role !== 'VENTES') ? {} : { active: true }, orderBy: { name: 'asc' } });
   good(res, req.user.role === 'VENTES' ? products.map(({ purchasePriceCents, ...item }) => item) : products);
 }));
+app.get('/api/products/catalog', auth, permit('products.manage'), safe(async (req, res) => {
+  const query = String(req.query.q || '').trim();
+  const category = String(req.query.category || '').trim();
+  const page = Math.max(Number(req.query.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 10), 100);
+  const where = {
+    active: true,
+    ...(category ? { category } : {}),
+    ...(query ? { OR: [
+      { name: { contains: query, mode: 'insensitive' } },
+      { internalCode: { contains: query, mode: 'insensitive' } },
+      { barcode: { contains: query, mode: 'insensitive' } },
+    ] } : {}),
+  };
+  const [total, items, barcodeCount, categoryRows] = await Promise.all([
+    prisma.product.count({ where }),
+    prisma.product.findMany({ where, orderBy: { name: 'asc' }, skip: (page - 1) * limit, take: limit }),
+    prisma.product.count({ where: { active: true, barcode: { not: null } } }),
+    prisma.product.findMany({ where: { active: true }, distinct: ['category'], select: { category: true }, orderBy: { category: 'asc' } }),
+  ]);
+  good(res, { items, total, page, limit, barcodeCount, categories: categoryRows.map(item => item.category) });
+}));
 app.get('/api/products/lookup', auth, safe(async (req, res) => {
   const code = String(req.query.code || '').trim();
   if (!code) fail('Code manquant.');

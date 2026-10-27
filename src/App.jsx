@@ -56,7 +56,7 @@ const firstPage = role => role === 'VENTES' ? 'sales' : role === 'MANAGER' ? 'da
 const initial = { products: [], purchases: [], receptions: [], sales: [], movements: [], suppliers: [], profit: [], cash: [], users: [], audits: [], dashboard: null, purchaseSummary: null, stockSummary: null };
 const resourcesForPage = (role, page) => {
   const shared = {
-    products: ['products'], stock: ['products'], purchases: ['purchases', 'products', 'suppliers'],
+    products: [], stock: ['products'], purchases: ['purchases', 'products', 'suppliers'],
     receptions: ['receptions', 'purchases'], suppliers: ['suppliers'], movements: ['movements'],
     reports: ['sales', 'profit'], cash: ['cash'], users: ['users'], audit: ['audit'], import: [],
   };

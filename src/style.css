@@ -146,3 +146,5 @@ table tbody tr:hover{background:#f6f9ff}
 @media(min-width:900px){.vendor-pos{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"cart catalogue"}.vendor-cart{position:sticky;top:82px}}
 
 .seller-summary{display:flex;gap:10px;flex-wrap:wrap;padding:0 20px 20px}.seller-summary button{display:flex;flex-direction:column;gap:5px;min-width:190px;flex:1;border:1px solid #dce5f0;border-radius:8px;background:#fff;padding:13px;text-align:left;color:#415a73}.seller-summary button strong{font-size:12px;color:#183754}.seller-summary button span{font-size:10px;color:#71849a}.seller-summary button.active{border-color:#2aa98d;background:#eaf8f3}.seller-summary button.active strong{color:#08755e}@media(max-width:590px){.seller-summary{padding:0 12px 12px}.seller-summary button{min-width:100%}}
+
+.catalog-loading{padding:24px;text-align:center;color:#8292a0;font-size:12px}.catalog-pagination{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid #edf0f2;padding:13px 20px;color:#788895;font-size:11px;font-weight:700}.catalog-pagination>div{display:flex;gap:8px}
